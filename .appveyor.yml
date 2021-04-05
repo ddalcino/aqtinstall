@@ -1,0 +1,12 @@
+install:
+  - ps: |
+      & "ci\install_python.ps1"
+  - cmd: |
+      rem py -m pip install -U pip
+      py -m pip install aqtinstall
+
+build: off
+
+test_script:
+  - cmd: |
+      py -m aqt install -O Qt 5.13.2 windows desktop win64_msvc2015_64
