@@ -2,7 +2,7 @@ install:
   - ps: |
       & "ci\install_python.ps1"
   - cmd: |
-      rem py -m pip install -U pip
+      py -m pip install -U pip
       py -m pip install aqtinstall
 
 build: off
