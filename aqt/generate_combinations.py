@@ -5,6 +5,7 @@ import logging
 import re
 from pathlib import Path
 from typing import (
+    Callable,
     Dict,
     Generator,
     Iterator,
@@ -13,7 +14,6 @@ from typing import (
     Set,
     Tuple,
     Union,
-    Callable,
 )
 
 from tqdm import tqdm
