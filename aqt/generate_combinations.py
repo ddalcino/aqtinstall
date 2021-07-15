@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings
-from aqt.metadata import ArchiveId, ListCommand, Versions
+from aqt.metadata import ArchiveId, MetadataFactory, Versions
 
 
 def is_blacklisted_tool(tool_name: str) -> bool:
@@ -75,9 +75,9 @@ def iter_arches() -> Generator[dict, None, None]:
         for version in versions:
             if version == "5.9.9" and archive_id.extension == "wasm":
                 continue
-            for arch_name in ListCommand(
+            for arch_name in MetadataFactory(
                 archive_id, architectures_ver=version
-            ).action():
+            ).getList():
                 yield {
                     "os_name": archive_id.host,
                     "target": archive_id.target,
@@ -88,10 +88,12 @@ def iter_arches() -> Generator[dict, None, None]:
 def iter_tool_variants() -> Generator[dict, None, None]:
     for archive_id in iter_archive_ids(categories=("tools",)):
         print("Fetching tool variants for {}".format(archive_id))
-        for tool_name in tqdm(sorted(ListCommand(archive_id).action())):
+        for tool_name in tqdm(sorted(MetadataFactory(archive_id).getList())):
             if is_blacklisted_tool(tool_name):
                 continue
-            for tool_variant in ListCommand(archive_id, tool_name=tool_name).action():
+            for tool_variant in MetadataFactory(
+                archive_id, tool_name=tool_name
+            ).getList():
                 yield {
                     "os_name": archive_id.host,
                     "target": archive_id.target,
@@ -107,7 +109,7 @@ def iter_qt_minor_groups(
         "qt5",
         "qt6",
     ):
-        versions: Versions = ListCommand(ArchiveId(cat, host, target)).action()
+        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
         for minor_group in versions:
             v = minor_group[0]
             yield v.major, v.minor
@@ -121,9 +123,9 @@ def iter_modules_for_qt_minor_groups(
         cat = f"qt{major}"
         yield {
             "qt_version": f"{major}.{minor}",
-            "modules": ListCommand(
+            "modules": MetadataFactory(
                 ArchiveId(cat, host, target), modules_ver=f"{major}.{minor}.0"
-            ).action(),
+            ).getList(),
         }
 
 
@@ -133,7 +135,7 @@ def list_qt_versions(host: str = "linux", target: str = "desktop") -> List[str]:
         "qt5",
         "qt6",
     ):
-        versions: Versions = ListCommand(ArchiveId(cat, host, target)).action()
+        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
         for minor_group in versions:
             all_versions.extend([str(ver) for ver in minor_group])
     return all_versions
