@@ -20,7 +20,12 @@ from tqdm import tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings
-from aqt.metadata import ArchiveId, MetadataFactory, Versions
+from aqt.metadata import (
+    ArchiveId,
+    MetadataFactory,
+    Versions,
+    fetch_new_archive_versions,
+)
 
 
 def is_blacklisted_tool(tool_name: str) -> bool:
@@ -154,13 +159,19 @@ def merge_records(arch_records) -> List[Dict]:
     return all_records
 
 
+def list_new_archive_versions():
+    print("Fetching list of versions from 'new_archive'...")
+    versions = fetch_new_archive_versions(5, range(1, 9))
+    return [str(ver) for ver in versions.flattened()]
+
+
 def generate_combos():
     return {
         "qt": merge_records(iter_arches()),
         "tools": list(iter_tool_variants()),
         "modules": list(iter_modules_for_qt_minor_groups()),
         "versions": list_qt_versions(),
-        "new_archive": list(),
+        "new_archive": list_new_archive_versions(),
     }
 
 
@@ -299,9 +310,6 @@ def compare_combos(
         print_difference(actual_set, expected_set, expect_name, root_key)
 
 
-logger = logging.getLogger("aqt.generate_combos")
-
-
 def alphabetize_modules(combos: Dict):
     for i, item in enumerate(combos["modules"]):
         combos["modules"][i]["modules"] = sorted(item["modules"])
@@ -309,6 +317,7 @@ def alphabetize_modules(combos: Dict):
 
 if __name__ == "__main__":
     Settings.load_settings()
+    logger = logging.getLogger("aqt.generate_combos")
     try:
         actual = generate_combos()
         print("=" * 80)
