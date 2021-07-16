@@ -24,9 +24,18 @@ import operator
 import posixpath
 import random
 import re
-import shutil
 from logging import getLogger
-from typing import Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import (
+    Callable,
+    Dict,
+    Generator,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 from xml.etree import ElementTree as ElementTree
 
 import bs4
@@ -277,58 +286,54 @@ class ToolData:
         "Description",
     ]
 
-    short_head = [
-        "Tool Variant Name",
-        "Version",
-        "Release Date",
-    ]
-
     def __init__(self, tool_data):
         self.tool_data = tool_data
-        for key in tool_data.keys():
-            self.tool_data[key]["Description"] = tool_data[key]["Description"].replace(
-                "<br>", "\n"
-            )
 
     def __format__(self, format_spec) -> str:
-        short = False
-        if format_spec == "{:s}":
+        if format_spec == "{s}":
             return str(self)
         if format_spec == "":
             max_width: int = 0
-        elif format_spec == "{:T}":
-            short = True
-            max_width = 0
         else:
-            match = re.match(r"\{?:?(\d+)t\}?", format_spec)
+            match = re.match(r"\{(.*):(\d*)t\}", format_spec)
             if match:
                 g = match.groups()
-                max_width = int(g[0])
+                max_width = 0 if g[1] == "" else int(g[1])
             else:
-                raise ValueError("Wrong format {}".format(format_spec))
+                raise ValueError("Wrong format")
         table = Texttable(max_width=max_width)
         table.set_deco(Texttable.HEADER)
-        if short:
-            table.header(self.short_head)
-            table.add_rows(self._short_rows(), header=False)
-        else:
-            table.header(self.head)
-            table.add_rows(self._rows(), header=False)
+        table.header(self.head)
+        table.add_rows(self.rows, header=False)
         return table.draw()
 
-    def _rows(self):
+    @property
+    def rows(self):
         keys = ("Version", "ReleaseDate", "DisplayName", "Description")
         return [
             [name, *[content[key] for key in keys]]
             for name, content in self.tool_data.items()
         ]
 
-    def _short_rows(self):
-        keys = ("Version", "ReleaseDate")
-        return [
-            [name, *[content[key] for key in keys]]
-            for name, content in self.tool_data.items()
-        ]
+
+def fetch_new_archive_versions(
+    qt_major: int, qt_minor_range: Iterable[int]
+) -> Versions:
+    def to_version(v: str) -> Optional[Version]:
+        try:
+            return Version(v)
+        except ValueError:
+            return None
+
+    def iterate_versions() -> Generator[Tuple[int, List[Version]], None, None]:
+        for qt_minor in qt_minor_range:
+            html_doc = MetadataFactory.fetch_http(
+                rest_of_url=f"new_archive/qt/{qt_major}.{qt_minor}/"
+            )
+            folders = MetadataFactory.iterate_folders(html_doc)
+            yield qt_minor, list(filter(None, map(to_version, sorted(folders))))
+
+    return Versions(list(iterate_versions()))
 
 
 class MetadataFactory:
@@ -357,7 +362,7 @@ class MetadataFactory:
         :param extensions_ver:      Version of Qt for which to list extensions
         :param architectures_ver:   Version of Qt for which to list architectures
         """
-        self.logger = getLogger("aqt.metadata")
+        self.logger = getLogger("aqt.archives")
         self.archive_id = archive_id
         self.filter_minor = filter_minor
 
@@ -685,56 +690,40 @@ class MetadataFactory:
         return "{} with minor version {}".format(self.archive_id, self.filter_minor)
 
 
-def suggested_follow_up(meta: MetadataFactory) -> List[str]:
+def suggested_follow_up(meta: MetadataFactory, printer: Callable[[str], None]) -> None:
     """Makes an informed guess at what the user got wrong, in the event of an error."""
-    msg = []
-    base_cmd = "aqt list {0.category} {0.host} {0.target}".format(meta.archive_id)
+    base_cmd = "aqt {0.category} {0.host} {0.target}".format(meta.archive_id)
     if meta.archive_id.extension:
-        msg.append(
-            f"Please use '{base_cmd} --extensions <QT_VERSION>' to list valid extensions."
+        msg = "Please use '{} --extensions <QT_VERSION>' to list valid extensions.\n".format(
+            base_cmd
         )
+        printer(msg)
 
     if meta.archive_id.is_tools() and meta.request_type == "tool variant names":
-        msg.append(f"Please use '{base_cmd}' to check what tools are available.")
+        msg = "Please use '{}' to check what tools are available.".format(base_cmd)
+        printer(msg)
     elif meta.filter_minor is not None:
-        msg.append(
-            f"Please use '{base_cmd}' to check that versions of {meta.archive_id.category} "
-            f"exist with the minor version '{meta.filter_minor}'."
+        msg = "Please use '{}' to check that versions of {} exist with the minor version '{}'".format(
+            base_cmd, meta.archive_id.category, meta.filter_minor
         )
+        printer(msg)
     elif meta.request_type in ("architectures", "modules", "extensions"):
-        msg.append(f"Please use '{base_cmd}' to show versions of Qt available.")
-
-    return msg
-
-
-def format_suggested_follow_up(suggestions: Iterable[str]) -> str:
-    if not suggestions:
-        return ""
-    return ("=" * 30 + "Suggested follow-up:" + "=" * 30 + "\n") + "\n".join(
-        ["* " + suggestion for suggestion in suggestions]
-    )
+        msg = "Please use '{}' to show versions of Qt available".format(base_cmd)
+        printer(msg)
 
 
 def show_list(meta: MetadataFactory) -> int:
-    logger = getLogger("aqt.metadata")
+    logger = getLogger("aqt.list")
     try:
         output = meta.getList()
         if not output:
             logger.info("No {} available for this request.".format(meta.request_type))
-            suggestions = suggested_follow_up(meta)
-            if suggestions:
-                logger.info(format_suggested_follow_up(suggestions))
+            suggested_follow_up(meta, logger.info)
             return 1
         if isinstance(output, Versions):
             print(format(output))
         elif isinstance(output, ToolData):
-            width: int = shutil.get_terminal_size((0, 40)).columns
-            if width == 0:  # notty ?
-                print(format(output, "{:0t}"))
-            elif width < 95:  # narrow terminal
-                print(format(output, "{:T}"))
-            else:
-                print("{0:{1}t}".format(output, width))
+            print(format(output, "{:t}"))  # can set width "{:100t}"
         elif meta.archive_id.is_tools():
             print(*output, sep="\n")
         else:
@@ -745,7 +734,5 @@ def show_list(meta: MetadataFactory) -> int:
         return 1
     except (ArchiveConnectionError, ArchiveDownloadError) as e:
         logger.error("{}".format(e))
-        suggestions = suggested_follow_up(meta)
-        if suggestions:
-            logger.error(format_suggested_follow_up(suggestions))
+        suggested_follow_up(meta, logger.error)
         return 1
