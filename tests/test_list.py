@@ -7,7 +7,14 @@ from typing import Generator
 import pytest
 
 from aqt.installer import Cli
-from aqt.metadata import ArchiveId, MetadataFactory, SimpleSpec, Version, Versions
+from aqt.metadata import (
+    ArchiveId,
+    MetadataFactory,
+    SimpleSpec,
+    Version,
+    Versions,
+    fetch_new_archive_versions,
+)
 
 
 def test_versions():
@@ -368,3 +375,20 @@ def test_list_invalid_extensions(
     sys.stdout.write(out)
     sys.stderr.write(err)
     assert expected_msg in err
+
+
+def test_list_new_archive(monkeypatch):
+
+    url_pattern = re.compile(r"^.+/(\d+)\.(\d+)/$")
+
+    def _mock(rest_of_url: str) -> str:
+        major, minor = url_pattern.match(rest_of_url).groups()
+        file = Path(__file__).parent / "data" / "new_archive" / f"{major}.{minor}.html"
+        return file.read_text("utf-8")
+
+    monkeypatch.setattr(MetadataFactory, "fetch_http", _mock)
+    qt_major, qt_minor_range = 5, range(2, 5)
+    expected = ["5.2.0", "5.2.1", "5.3.0", "5.3.1", "5.3.2", "5.4.0", "5.4.1", "5.4.2"]
+
+    v = fetch_new_archive_versions(qt_major, qt_minor_range).flattened()
+    assert [str(version) for version in v] == expected
