@@ -1,0 +1,19 @@
+name: "Check combinations.json"
+on:
+  # Run at midnight on the first of every month
+  schedule:
+  - cron: "0 0 1 * *"
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+      with:
+        fetch-depth: 20
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+    - run: aqt/generate_combinations.py
+
