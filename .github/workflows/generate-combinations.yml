@@ -15,5 +15,5 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.8
-    - run: aqt/generate_combinations.py
+    - run: aqt/generate_combinations.py make_PR
 
