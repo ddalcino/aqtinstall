@@ -7,14 +7,7 @@ from typing import Generator
 import pytest
 
 from aqt.installer import Cli
-from aqt.metadata import (
-    ArchiveId,
-    MetadataFactory,
-    SimpleSpec,
-    Version,
-    Versions,
-    fetch_new_archive_versions,
-)
+from aqt.metadata import ArchiveId, MetadataFactory, SimpleSpec, Version, Versions
 
 
 def test_versions():
@@ -201,7 +194,7 @@ def test_tool_long_listing(monkeypatch, host: str, target: str, tool_name: str):
     monkeypatch.setattr(MetadataFactory, "fetch_http", lambda self, _: _xml)
 
     table = MetadataFactory(archive_id).fetch_tool_long_listing(tool_name)
-    assert table.rows == expect["long_listing"]
+    assert table._rows() == expect["long_listing"]
 
 
 @pytest.mark.parametrize(
