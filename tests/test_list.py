@@ -7,7 +7,14 @@ from typing import Generator
 import pytest
 
 from aqt.installer import Cli
-from aqt.metadata import ArchiveId, MetadataFactory, SimpleSpec, Version, Versions
+from aqt.metadata import (
+    ArchiveId,
+    MetadataFactory,
+    SimpleSpec,
+    Version,
+    Versions,
+    fetch_new_archive_versions,
+)
 
 
 def test_versions():
