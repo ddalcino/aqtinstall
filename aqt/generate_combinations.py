@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import sys
 from pathlib import Path
 from typing import (
     Callable,
@@ -334,21 +335,57 @@ def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
         combos["modules"][i]["modules"] = sorted(item["modules"])
 
 
-if __name__ == "__main__":
-    Settings.load_settings()
+def write_combinations_json(combos: Dict[str, Union[List[Dict], List[str]]]):
+    json_text = json.dumps(combos, sort_keys=True, indent=2)
+    combos_file = Path(__file__).parent / "combinations.json"
+    combos_file.write_text(json_text, encoding="utf_8")
+
+
+def open_pull_request():
+    """
+    $ git add aqt/combinations.json
+    $ git commit -m "Update aqt/combinations.json"
+    """
+    raise NotImplementedError()
+
+
+def main(is_make_pull_request: bool) -> int:
     logger = logging.getLogger("aqt.generate_combos")
     try:
         actual = generate_combos()
+        expect = json.loads((Path(__file__).parent / "combinations.json").read_text())
+        alphabetize_modules(expect[0])
+
         print("=" * 80)
         print("Program Output:")
         print(pretty_print_combos(actual))
-        # print(json.dumps(generate_combos(), sort_keys=True, indent=2))
+
         print("=" * 80)
         print("Comparison with existing 'combinations.json':")
+        diff = compare_combos(
+            actual, expect[0], "program_output", "combinations.json", print
+        )
 
-        expect = json.loads((Path(__file__).parent / "combinations.json").read_text())
-        alphabetize_modules(expect[0])
-        compare_combos(actual, expect[0], "program_output", "combinations.json", print)
+        if not diff:
+            return 0  # no difference
+        if is_make_pull_request:
+            write_combinations_json(actual)
+            open_pull_request()
+            return 0  # PR request made successfully
+        return 1  # difference reported
+
     except (ArchiveConnectionError, ArchiveDownloadError) as e:
         logger.error("{}".format(e))
-        exit(1)
+        return 1
+
+
+if __name__ == "__main__":
+    Settings.load_settings()
+
+    if len(sys.argv) > 1 and sys.argv[1] == "help":
+        print(
+            "This program compares 'combinations.json' to what is actually present at download.qt.io.\n"
+            f"The command '{sys.argv[0]} make_PR' will make a pull request if there are differences.\n"
+        )
+        exit(0)
+    exit(main(is_make_pull_request=len(sys.argv) > 1 and sys.argv[1] == "make_PR"))
