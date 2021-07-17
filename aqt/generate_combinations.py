@@ -159,13 +159,13 @@ def merge_records(arch_records) -> List[Dict]:
     return all_records
 
 
-def list_new_archive_versions():
+def list_new_archive_versions() -> List[str]:
     print("Fetching list of versions from 'new_archive'...")
     versions = fetch_new_archive_versions(5, range(1, 9))
     return [str(ver) for ver in versions.flattened()]
 
 
-def generate_combos():
+def generate_combos() -> Dict[str, Union[List[Dict], List[str]]]:
     return {
         "qt": merge_records(iter_arches()),
         "tools": list(iter_tool_variants()),
@@ -175,7 +175,7 @@ def generate_combos():
     }
 
 
-def pretty_print_combos(combos: Dict) -> str:
+def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
     """
     Attempts to mimic the formatting of the existing combinations.json.
     """
@@ -255,11 +255,19 @@ def pretty_print_combos(combos: Dict) -> str:
 
 
 def compare_combos(
-    actual_combos, expected_combos, actual_name, expect_name, printer: Callable
-):
+    actual_combos: Dict[str, Union[List[str], List[Dict]]],
+    expected_combos: Dict[str, Union[List[str], List[Dict]]],
+    actual_name: str,
+    expect_name: str,
+    printer: Callable,
+) -> bool:
+    # list_of_str_keys: the values attached to these keys are List[str]
     list_of_str_keys = "versions", "new_archive"
 
-    def compare_modules_entry(actual_mod_item, expect_mod_item):
+    has_difference = False
+
+    def compare_modules_entry(actual_mod_item: Dict, expect_mod_item: Dict) -> bool:
+        """Return True if difference detected. Print description of difference."""
         version = actual_mod_item["qt_version"]
         actual_modules, expect_modules = set(actual_mod_item["modules"]), set(
             expect_mod_item["modules"]
@@ -274,6 +282,7 @@ def compare_combos(
             printer(
                 f"{expect_name}['modules'] for Qt {version} is missing {mods_missing_from_expect}"
             )
+        return bool(mods_missing_from_actual) or bool(mods_missing_from_expect)
 
     def to_set(a_list: Union[List[str], List[Dict]]) -> Set:
         if len(a_list) == 0:
@@ -283,16 +292,20 @@ def compare_combos(
         assert isinstance(a_list[0], Dict)
         return set([str(a_dict) for a_dict in a_list])
 
-    def print_difference(superset, subset, subset_name, key):
+    def report_difference(
+        superset: Set, subset: Set, subset_name: str, key: str
+    ) -> bool:
+        """Return True if difference detected. Print description of difference."""
         missing_from_superset = sorted(superset - subset)
         if not missing_from_superset:
-            return
+            return False
         printer(f"{subset_name}['{key}'] is missing these entries:")
         if key in list_of_str_keys:
             printer(format(missing_from_superset))
-            return
+            return True
         for el in missing_from_superset:
             printer(format(el))
+        return True
 
     for root_key in actual_combos.keys():
         print(f"\nComparing {root_key}:\n{'-' * 40}")
@@ -301,16 +314,22 @@ def compare_combos(
                 actual_combos[root_key], expected_combos[root_key]
             ):
                 assert actual_row["qt_version"] == expect_row["qt_version"]
-                compare_modules_entry(actual_row, expect_row)
+                has_difference |= compare_modules_entry(actual_row, expect_row)
             continue
 
         actual_set = to_set(actual_combos[root_key])
         expected_set = to_set(expected_combos[root_key])
-        print_difference(expected_set, actual_set, actual_name, root_key)
-        print_difference(actual_set, expected_set, expect_name, root_key)
+        has_difference |= report_difference(
+            expected_set, actual_set, actual_name, root_key
+        )
+        has_difference |= report_difference(
+            actual_set, expected_set, expect_name, root_key
+        )
+
+    return has_difference
 
 
-def alphabetize_modules(combos: Dict):
+def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
     for i, item in enumerate(combos["modules"]):
         combos["modules"][i]["modules"] = sorted(item["modules"])
 
