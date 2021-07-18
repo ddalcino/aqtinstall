@@ -25,12 +25,7 @@ from tqdm import tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings
-from aqt.metadata import (
-    ArchiveId,
-    MetadataFactory,
-    Versions,
-    fetch_new_archive_versions,
-)
+from aqt.metadata import ArchiveId, MetadataFactory, Versions
 
 
 def is_blacklisted_tool(tool_name: str) -> bool:
@@ -164,19 +159,13 @@ def merge_records(arch_records) -> List[Dict]:
     return all_records
 
 
-def list_new_archive_versions() -> List[str]:
-    print("Fetching list of versions from 'new_archive'...")
-    versions = fetch_new_archive_versions(5, range(1, 9))
-    return [str(ver) for ver in versions.flattened()]
-
-
-def generate_combos() -> Dict[str, Union[List[Dict], List[str]]]:
+def generate_combos(existing):
     return {
         "qt": merge_records(iter_arches()),
         "tools": list(iter_tool_variants()),
         "modules": list(iter_modules_for_qt_minor_groups()),
         "versions": list_qt_versions(),
-        "new_archive": list_new_archive_versions(),
+        "new_archive": existing["new_archive"],
     }
 
 
@@ -396,9 +385,9 @@ def main(is_make_pull_request: bool) -> int:
     logger = logging.getLogger("aqt.generate_combos")
     combos_json_filename = Path(__file__).parent / "combinations.json"
     try:
-        actual = generate_combos()
         expect = json.loads(combos_json_filename.read_text())
         alphabetize_modules(expect[0])
+        actual = generate_combos(existing=expect)
 
         print("=" * 80)
         print("Program Output:")
