@@ -328,7 +328,9 @@ def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
         combos["modules"][i]["modules"] = sorted(item["modules"])
 
 
-def write_combinations_json(combos: Dict[str, Union[List[Dict], List[str]]], filename: Path):
+def write_combinations_json(
+    combos: Dict[str, Union[List[Dict], List[str]]], filename: Path
+):
     json_text = json.dumps(combos, sort_keys=True, indent=2)
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
