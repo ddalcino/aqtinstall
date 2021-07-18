@@ -159,13 +159,13 @@ def merge_records(arch_records) -> List[Dict]:
     return all_records
 
 
-def generate_combos(existing):
+def generate_combos(new_archive: List[str]):
     return {
         "qt": merge_records(iter_arches()),
         "tools": list(iter_tool_variants()),
         "modules": list(iter_modules_for_qt_minor_groups()),
         "versions": list_qt_versions(),
-        "new_archive": existing["new_archive"],
+        "new_archive": new_archive,
     }
 
 
@@ -389,7 +389,7 @@ def main(is_make_pull_request: bool) -> int:
     try:
         expect = json.loads(combos_json_filename.read_text())
         alphabetize_modules(expect[0])
-        actual = generate_combos(existing=expect)
+        actual = generate_combos(new_archive=expect[0]["new_archive"])
 
         print("=" * 80)
         print("Program Output:")
