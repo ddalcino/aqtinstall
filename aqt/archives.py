@@ -20,106 +20,48 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+import posixpath
 import xml.etree.ElementTree as ElementTree
+from dataclasses import dataclass, field
 from logging import getLogger
+from typing import List, Optional, Tuple
 
 from aqt.exceptions import ArchiveListError, NoPackageFound
 from aqt.helper import Settings, getUrl
+from aqt.metadata import Version
 
 
+@dataclass
 class TargetConfig:
-    def __init__(self, version, target, arch, os_name):
-        self.version = version
-        self.target = target
-        self.arch = arch
-        self.os_name = os_name
+    version: str
+    target: str
+    arch: str
+    os_name: str
+
+    def __post_init__(self):
+        self.version = str(self.version)
 
 
+@dataclass
 class QtPackage:
-    """
-    Hold package information.
-    """
+    name: str
+    archive_url: str
+    archive: str
+    package_desc: str
+    hashurl: str
+    version: Optional[Version] = field(default=None)
 
-    def __init__(self, name, archive_url, archive, package_desc, hashurl):
-        self.name = name
-        self.url = archive_url
-        self.archive = archive
-        self.desc = package_desc
-        self.hashurl = hashurl
+    def __repr__(self):
+        v_info = f", version={self.version}" if self.version else ""
+        return f"QtPackage(name={self.name}, archive={self.archive}{v_info})"
 
-
-class ListInfo:
-    """
-    Hold list information
-    """
-
-    def __init__(self, name, display_name, desc, virtual):
-        self.name = name
-        self.display_name = display_name
-        self.desc = desc
-        self.virtual = virtual
-
-
-class PackagesList:
-    """
-    Hold packages list information.
-    """
-
-    def __init__(self, version, os_name, target, base, timeout=(5, 5)):
-        self.version = version
-        self.os_name = os_name
-        self.target = target
-        self.archives = []
-        self.base = base
-        self.timeout = timeout
-        self.logger = getLogger("aqt")
-        self._get_archives()
-
-    def _get_archives(self):
-        qt_ver_num = self.version.replace(".", "")
-        self.qt_ver_base = self.version[0:1]
-        # Get packages index
-        if self.qt_ver_base == "6" and self.target == "android":
-            arch_ext = ["_armv7/", "_x86/", "_x86_64/", "_arm64_v8a/"]
-        elif (
-            self.qt_ver_base == "5"
-            and int(qt_ver_num) >= 5130
-            and self.target == "desktop"
-        ):
-            arch_ext = ["/", "_wasm/"]
-        else:
-            arch_ext = ["/"]
-        for ext in arch_ext:
-            archive_path = "{0}{1}{2}/qt{3}_{4}{5}".format(
-                self.os_name,
-                "_x86/" if self.os_name == "windows" else "_x64/",
-                self.target,
-                self.qt_ver_base,
-                qt_ver_num,
-                ext,
-            )
-            update_xml_url = "{0}{1}Updates.xml".format(self.base, archive_path)
-            xml_text = getUrl(update_xml_url, self.timeout, self.logger)
-            self.update_xml = ElementTree.fromstring(xml_text)
-            for packageupdate in self.update_xml.iter("PackageUpdate"):
-                name = packageupdate.find("Name").text
-                if packageupdate.find("DownloadableArchives").text is not None:
-                    package_desc = packageupdate.findtext("Description")
-                    display_name = packageupdate.findtext("DisplayName")
-                    virtual_str = packageupdate.findtext("Virtual")
-                    if virtual_str == "true":
-                        virtual = True
-                    else:
-                        virtual = False
-                    self.archives.append(
-                        ListInfo(name, display_name, package_desc, virtual)
-                    )
-        if len(self.archives) == 0:
-            self.logger.error("Error while parsing package information!")
-            exit(1)
-
-    def get_list(self):
-        return self.archives
+    def __str__(self):
+        v_info = f", version={self.version}" if self.version else ""
+        return (
+            f"QtPackage(name={self.name}, url={self.url}, "
+            f"archive={self.archive}, desc={self.desc}"
+            f"hashurl={self.hashurl}{v_info})"
+        )
 
 
 class QtArchives:
@@ -132,74 +74,92 @@ class QtArchives:
         self,
         os_name,
         target,
-        version,
+        version_str,
         arch,
         base,
         subarchives=None,
         modules=None,
-        logging=None,
         all_extra=False,
         timeout=(5, 5),
     ):
-        self.version = version
+        self.version = Version(version_str)
         self.target = target
         self.arch = arch
         self.os_name = os_name
         self.all_extra = all_extra
-        self.arch_list = [item.get("arch") for item in Settings().qt_combinations]
+        self.arch_list = [item.get("arch") for item in Settings.qt_combinations]
         all_archives = subarchives is None
         self.base = base + "/online/qtsdkrepository/"
-        if logging:
-            self.logger = logging
-        else:
-            self.logger = getLogger("aqt")
+        self.logger = getLogger("aqt.archives")
         self.archives = []
         self.mod_list = []
-        qt_ver_num = self.version.replace(".", "")
-        self.qt_ver_base = self.version[0:1]
         if all_extra:
             self.all_extra = True
         else:
             for m in modules if modules is not None else []:
                 self.mod_list.append(
-                    "qt.qt{}.{}.{}.{}".format(self.qt_ver_base, qt_ver_num, m, arch)
+                    "qt.qt{0}.{0}{1}{2}.{3}.{4}".format(
+                        self.version.major,
+                        self.version.minor,
+                        self.version.patch,
+                        m,
+                        arch,
+                    )
                 )
-                self.mod_list.append("qt.{}.{}.{}".format(qt_ver_num, m, arch))
+                self.mod_list.append(
+                    "qt.{0}{1}{2}.{3}.{4}".format(
+                        self.version.major,
+                        self.version.minor,
+                        self.version.patch,
+                        m,
+                        arch,
+                    )
+                )
         self.timeout = timeout
-        self._get_archives(qt_ver_num)
+        self._get_archives()
         if not all_archives:
             self.archives = list(filter(lambda a: a.name in subarchives, self.archives))
 
-    def _get_archives(self, qt_ver_num):
+    def _get_archives(self):
         # Get packages index
         if self.arch == "wasm_32":
             arch_ext = "_wasm"
-        elif self.arch.startswith("android_") and qt_ver_num[0:1] == "6":
+        elif self.arch.startswith("android_") and self.version.major == 6:
             arch_ext = "{}".format(self.arch[7:])
         else:
             arch_ext = ""
-        archive_path = "{0}{1}{2}/qt{3}_{4}{5}/".format(
+        archive_path = "{0}{1}{2}/qt{3}_{3}{4}{5}{6}/".format(
             self.os_name,
             "_x86/" if self.os_name == "windows" else "_x64/",
             self.target,
-            self.qt_ver_base,
-            qt_ver_num,
+            self.version.major,
+            self.version.minor,
+            self.version.patch,
             arch_ext,
         )
         update_xml_url = "{0}{1}Updates.xml".format(self.base, archive_path)
         archive_url = "{0}{1}".format(self.base, archive_path)
         target_packages = []
         target_packages.append(
-            "qt.qt{}.{}.{}".format(self.qt_ver_base, qt_ver_num, self.arch)
+            "qt.qt{0}.{0}{1}{2}.{3}".format(
+                self.version.major,
+                self.version.minor,
+                self.version.patch,
+                self.arch,
+            )
         )
-        target_packages.append("qt.{}.{}".format(qt_ver_num, self.arch))
+        target_packages.append(
+            "qt.{0}{1}{2}.{3}".format(
+                self.version.major, self.version.minor, self.version.patch, self.arch
+            )
+        )
         target_packages.extend(self.mod_list)
         self._download_update_xml(update_xml_url)
         self._parse_update_xml(archive_url, target_packages)
 
     def _download_update_xml(self, update_xml_url):
         """Hook for unit test."""
-        self.update_xml_text = getUrl(update_xml_url, self.timeout, self.logger)
+        self.update_xml_text = getUrl(update_xml_url, self.timeout)
 
     def _parse_update_xml(self, archive_url, target_packages):
         try:
@@ -207,51 +167,56 @@ class QtArchives:
         except ElementTree.ParseError as perror:
             self.logger.error("Downloaded metadata is corrupted. {}".format(perror))
             raise ArchiveListError("Downloaded metadata is corrupted.")
-        else:
-            for packageupdate in self.update_xml.iter("PackageUpdate"):
-                name = packageupdate.find("Name").text
-                # Need to filter archives to download when we want all extra modules
-                if self.all_extra:
-                    # Check platform
-                    name_last_section = name.split(".")[-1]
-                    if (
-                        name_last_section in self.arch_list
-                        and self.arch != name_last_section
-                    ):
+
+        for packageupdate in self.update_xml.iter("PackageUpdate"):
+            name = packageupdate.find("Name").text
+            # Need to filter archives to download when we want all extra modules
+            if self.all_extra:
+                # Check platform
+                name_last_section = name.split(".")[-1]
+                if (
+                    name_last_section in self.arch_list
+                    and self.arch != name_last_section
+                ):
+                    continue
+                # Check doc/examples
+                if self.arch in ["doc", "examples"]:
+                    if self.arch not in name:
                         continue
-                    # Check doc/examples
-                    if self.arch in ["doc", "examples"]:
-                        if self.arch not in name:
-                            continue
-                if self.all_extra or name in target_packages:
-                    if packageupdate.find("DownloadableArchives").text is not None:
-                        downloadable_archives = packageupdate.find(
-                            "DownloadableArchives"
-                        ).text.split(", ")
-                        full_version = packageupdate.find("Version").text
-                        package_desc = packageupdate.find("Description").text
-                        for archive in downloadable_archives:
-                            archive_name = archive.split("-", maxsplit=1)[0]
-                            package_url = (
-                                archive_url + name + "/" + full_version + archive
+            if self.all_extra or name in target_packages:
+                if packageupdate.find("DownloadableArchives").text is not None:
+                    downloadable_archives = packageupdate.find(
+                        "DownloadableArchives"
+                    ).text.split(", ")
+                    full_version = packageupdate.find("Version").text
+                    package_desc = packageupdate.find("Description").text
+                    for archive in downloadable_archives:
+                        archive_name = archive.split("-", maxsplit=1)[0]
+                        package_url = posixpath.join(
+                            # https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/qt5_5150/
+                            archive_url,
+                            # qt.qt5.5150.gcc_64/
+                            name,
+                            # 5.15.0-0-202005140804qtbase-Linux-RHEL_7_6-GCC-Linux-RHEL_7_6-X86_64.7z
+                            full_version + archive,
+                        )
+                        hashurl = package_url + ".sha1"
+                        self.archives.append(
+                            QtPackage(
+                                name=archive_name,
+                                archive_url=package_url,
+                                archive=archive,
+                                package_desc=package_desc,
+                                hashurl=hashurl,
                             )
-                            hashurl = package_url + ".sha1"
-                            self.archives.append(
-                                QtPackage(
-                                    archive_name,
-                                    package_url,
-                                    archive,
-                                    package_desc,
-                                    hashurl,
-                                )
-                            )
+                        )
         if len(self.archives) == 0:
             self.logger.error(
                 "Specified packages are not found while parsing XML of package information!"
             )
             raise NoPackageFound
 
-    def get_archives(self):
+    def get_packages(self) -> List[QtPackage]:
         """
          It returns an archive package list.
 
@@ -281,7 +246,6 @@ class SrcDocExamplesArchives(QtArchives):
         base,
         subarchives=None,
         modules=None,
-        logging=None,
         all_extra=False,
         timeout=(5, 5),
     ):
@@ -289,6 +253,7 @@ class SrcDocExamplesArchives(QtArchives):
         self.target = target
         self.os_name = os_name
         self.base = base
+        self.logger = getLogger("aqt.archives")
         super(SrcDocExamplesArchives, self).__init__(
             os_name,
             target,
@@ -297,25 +262,30 @@ class SrcDocExamplesArchives(QtArchives):
             base,
             subarchives=subarchives,
             modules=modules,
-            logging=logging,
             all_extra=all_extra,
             timeout=timeout,
         )
 
-    def _get_archives(self, qt_ver_num):
-        archive_path = "{0}{1}{2}/qt{3}_{4}{5}".format(
+    def _get_archives(self):
+        archive_path = "{0}{1}{2}/qt{3}_{3}{4}{5}{6}".format(
             self.os_name,
             "_x86/" if self.os_name == "windows" else "_x64/",
             self.target,
-            self.qt_ver_base,
-            qt_ver_num,
+            self.version.major,
+            self.version.minor,
+            self.version.patch,
             "_src_doc_examples/",
         )
         archive_url = "{0}{1}".format(self.base, archive_path)
         update_xml_url = "{0}/Updates.xml".format(archive_url)
         target_packages = []
         target_packages.append(
-            "qt.qt{}.{}.{}".format(self.qt_ver_base, qt_ver_num, self.flavor)
+            "qt.qt{0}.{0}{1}{2}.{3}".format(
+                self.version.major,
+                self.version.minor,
+                self.version.patch,
+                self.flavor,
+            )
         )
         target_packages.extend(self.mod_list)
         self._download_update_xml(update_xml_url)
@@ -338,20 +308,45 @@ class ToolArchives(QtArchives):
     """
 
     def __init__(
-        self, os_name, tool_name, version, arch, base, logging=None, timeout=(5, 5)
+        self,
+        os_name: str,
+        tool_name: str,
+        base: str,
+        version_str: Optional[str] = None,
+        arch: Optional[str] = None,
+        timeout: Tuple[int, int] = (5, 5),
     ):
         self.tool_name = tool_name
         self.os_name = os_name
+        self.logger = getLogger("aqt.archives")
         super(ToolArchives, self).__init__(
-            os_name, "desktop", version, arch, base, logging=logging, timeout=timeout
+            os_name=os_name,
+            target="desktop",
+            version_str=version_str,
+            arch=arch,
+            base=base,
+            timeout=timeout,
         )
 
-    def _get_archives(self, qt_ver_num):
+    def __str__(self):
+        return f"ToolArchives(tool_name={self.tool_name}, version={self.version}, arch={self.arch})"
+
+    def _get_archives(self):
+        _a = "_x64"
         if self.os_name == "windows":
-            archive_url = self.base + self.os_name + "_x86/" + self.target + "/"
-        else:
-            archive_url = self.base + self.os_name + "_x64/" + self.target + "/"
-        update_xml_url = "{0}{1}/Updates.xml".format(archive_url, self.tool_name)
+            _a = "_x86"
+
+        archive_url = posixpath.join(
+            # https://download.qt.io/online/qtsdkrepository/
+            self.base,
+            # linux_x64/
+            self.os_name + _a,
+            # desktop/
+            self.target,
+            # tools_ifw/
+            self.tool_name,
+        )
+        update_xml_url = posixpath.join(archive_url, "Updates.xml")
         self._download_update_xml(update_xml_url)  # call super method.
         self._parse_update_xml(archive_url, [])
 
@@ -361,40 +356,45 @@ class ToolArchives(QtArchives):
         except ElementTree.ParseError as perror:
             self.logger.error("Downloaded metadata is corrupted. {}".format(perror))
             raise ArchiveListError("Downloaded metadata is corrupted.")
-        else:
-            for packageupdate in self.update_xml.iter("PackageUpdate"):
-                name = packageupdate.find("Name").text
-                if name != self.arch:
-                    continue
-                _archives = packageupdate.find("DownloadableArchives").text
-                if _archives is not None:
-                    downloadable_archives = _archives.split(", ")
-                else:
-                    downloadable_archives = []
-                full_version = packageupdate.find("Version").text
-                if not full_version.startswith(self.version):
-                    self.logger.warning(
-                        "Version {} differ from requested version {} -- skip.".format(
-                            full_version, self.version
-                        )
+
+        for packageupdate in self.update_xml.iter("PackageUpdate"):
+            name = packageupdate.find("Name").text
+            if name != self.arch:
+                continue
+            _archives = packageupdate.find("DownloadableArchives").text
+            if _archives is not None:
+                downloadable_archives = _archives.split(", ")
+            else:
+                downloadable_archives = []
+            named_version = packageupdate.find("Version").text
+            full_version = Version(named_version)
+            if full_version.truncate("patch") != self.version.truncate("patch"):
+                self.logger.warning(
+                    "Base Version of {} is different from requested version {} -- skip.".format(
+                        named_version, self.version
                     )
-                    continue
-                named_version = full_version
-                package_desc = packageupdate.find("Description").text
-                for archive in downloadable_archives:
-                    package_url = (
-                        archive_url
-                        + self.tool_name
-                        + "/"
-                        + name
-                        + "/"
-                        + named_version
-                        + archive
+                )
+                continue
+            package_desc = packageupdate.find("Description").text
+            for archive in downloadable_archives:
+                package_url = posixpath.join(
+                    # https://download.qt.io/online/qtsdkrepository/linux_x64/desktop/tools_ifw/
+                    archive_url,
+                    # qt.tools.ifw.41/
+                    name,
+                    #  4.1.1-202105261130ifw-linux-x64.7z
+                    f"{named_version}{archive}",
+                )
+                hashurl = package_url + ".sha1"
+                self.archives.append(
+                    QtPackage(
+                        name=name,
+                        archive_url=package_url,
+                        archive=archive,
+                        package_desc=package_desc,
+                        hashurl=hashurl,
                     )
-                    hashurl = package_url + ".sha1"
-                    self.archives.append(
-                        QtPackage(name, package_url, archive, package_desc, hashurl)
-                    )
+                )
 
     def get_target_config(self) -> TargetConfig:
         """Get target configuration.

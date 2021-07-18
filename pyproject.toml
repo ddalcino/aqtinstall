@@ -8,3 +8,15 @@ local_scheme = "no-local-version"
 [tool.black]
 line-length = 88
 target-version = ['py38']
+
+[tool.check-manifest]
+ignore = ["aqt/version.py","azure-pipelines.yml","ci/*"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["aqt", "tests"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["if __name__ == .__main__.:", "pragma: no-cover", "@abstract", "def __repr__"]

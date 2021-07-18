@@ -21,7 +21,10 @@ def test_parse_update_xml(monkeypatch, os_name, version, target, datafile):
 
     monkeypatch.setattr(QtArchives, "_download_update_xml", _mock)
 
-    qt_archives = QtArchives(os_name, "desktop", version, target, Settings().baseurl)
+    Settings.load_settings(
+        os.path.join(os.path.dirname(__file__), "data", "settings.ini")
+    )
+    qt_archives = QtArchives(os_name, "desktop", version, target, Settings.baseurl)
     assert qt_archives.archives is not None
 
     # Get packages with all extra modules
@@ -39,7 +42,7 @@ def test_parse_update_xml(monkeypatch, os_name, version, target, datafile):
     assert qt_archives_all_modules.archives is not None
 
     # Extract all urls
-    url_list = [item.url for item in qt_archives.archives]
+    url_list = [item.archive_url for item in qt_archives.archives]
     url_all_modules_list = [item.url for item in qt_archives_all_modules.archives]
 
     # Check the difference list contains only extra modules urls for target specified

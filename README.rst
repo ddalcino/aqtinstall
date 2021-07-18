@@ -3,8 +3,7 @@ Another Qt installer(aqt)
 
 - Release: |pypi|
 - Documents: |docs|
-- Test status: |gha|
-
+- Test status: |gha| and Coverage: |coveralls|
 
 .. |pypi| image:: https://badge.fury.io/py/aqtinstall.svg
    :target: http://badge.fury.io/py/aqtinstall
@@ -12,6 +11,8 @@ Another Qt installer(aqt)
    :target: https://aqtinstall.readthedocs.io/en/latest/?badge=latest
 .. |gha| image:: https://github.com/miurahr/aqtinstall/workflows/Test%20on%20GH%20actions%20environment/badge.svg
    :target: https://github.com/miurahr/aqtinstall/actions?query=workflow%3A%22Test+on+GH+actions+environment%22
+.. |coveralls| image:: https://coveralls.io/repos/github/miurahr/aqtinstall/badge.svg?branch=master
+   :target: https://coveralls.io/github/miurahr/aqtinstall?branch=master
 
 This is a utility alternative to the official graphical Qt installer, for using in CI environment where an interactive
 UI is not usable such as Github Actions, Travis-CI, CircleCI, Azure-Pipelines, AppVeyor and others.
@@ -65,7 +66,7 @@ Requirements
 ------------
 
 - Minimum Python version:  3.6
-- Recommended Python version: 3.7.5 or later
+- Recommended Python version: 3.8, 3.9 (frequently tested on)
 
 - Dependent libraries: requests, py7zr
 
@@ -75,10 +76,10 @@ Install
 
 Same as usual, it can be installed with `pip`
 
-.. code-block:: bash
+.. code-block:: console
 
-    $ pip install -U pip
-    $ pip install aqtinstall
+    pip install -U pip
+    pip install aqtinstall
 
 You are recommended to update pip before installing aqtinstall.
 
@@ -93,7 +94,7 @@ Usage
 
 General usage looks like this:
 
-.. code-block:: bash
+::
 
     aqt [-h][--help][-O | --outputdir <directory>][-b | --base <mirror url>][-E | --external <7zip command>] \
         install <qt-version> <host> <target> [<arch>] [-m all | -m [extra module] [extra module]...] [--internal]
@@ -125,9 +126,9 @@ Installing tool and utility (Experimental)
 
 You can install tools and utilities using following syntax;
 
-.. code-block:: bash
+::
 
-    python -m aqt [-h][--help][-O | --outputdir <directory>][-b | --base <mirror url>][-E | --external <7zip command>] \
+    aqt [-h][--help][-O | --outputdir <directory>][-b | --base <mirror url>][-E <7zip command>] \
         tool <host> <tool_name> <tool-version> <arch> [--timeout <timeout>]
 
 * tool_name is one of `tools_ifw`, `tools_vcredist`, and `tools_openssl`.
@@ -145,20 +146,32 @@ Target directory
 aqt can take option '--outputdir' or '-O' that specify a target directory.
 
 The Qt packages are installed under current directory as such `Qt/<ver>/gcc_64/`
+
 If you want to install it in `C:\Qt` as same as standard gui installer default,
-run such as follows:
+run such as follows(on Windows):
 
-.. code-block:: bash
+.. code-block:: console
 
-    C:\> mkdir Qt
-    C:\> aqt install --outputdir c:\Qt 5.11.3 windows desktop win64_msvc2019_64
+    cd c:\
+    mkdir Qt
+    py -m aqt install --outputdir c:\Qt 5.15.2 windows desktop win64_msvc2019_64
+
+
+If you want to install it in `/opt/Qt` as same as standard gui installer default,
+run such as follows(on mac/linux):
+
+.. code-block:: console
+
+    sudo mkdir /opt/Qt
+    sudo python -m aqt install --outputdir /opt/Qt 5.15.2 linux desktop gcc_64
+
 
 Command examples
 ----------------
 
 Example: Installing Qt SDK 5.12.0 for Linux with QtCharts and QtNetworkAuth:
 
-.. code-block:: bash
+.. code-block:: console
 
     pip install aqtinstall
     aqt install --outputdir /opt/Qt 5.12.0 linux desktop -m qtcharts qtnetworkauth
@@ -166,60 +179,60 @@ Example: Installing Qt SDK 5.12.0 for Linux with QtCharts and QtNetworkAuth:
 
 Example: Installing Android (armv7) Qt 5.10.2:
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt install 5.10.2 linux android android_armv7
 
 
 Example: Installing Android Qt 5.15.2:
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt install 5.15.2 linux android android
 
 
 Example: Install examples, doc and source:
 
-.. code-block:: bash
+.. code-block:: console
 
-    C:\ aqt examples 5.15.0 windows desktop -m qtcharts qtnetworkauth
-    C:\ aqt doc 5.15.0 windows desktop -m qtcharts qtnetworkauth
-    C:\ aqt src 5.15.0 windows desktop
+    py -m aqt examples 5.15.0 windows desktop -m qtcharts qtnetworkauth
+    py -m aqt doc 5.15.0 windows desktop -m qtcharts qtnetworkauth
+    py -m aqt src 5.15.0 windows desktop
 
 
 Example: Install Web Assembly for Qt5
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt install 5.15.0 linux desktop wasm_32
 
 
 Example: Install an Install FrameWork (IFW):
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt tool linux tools_ifw 4.0 qt.tools.ifw.40
 
 
 Example: Install vcredist:
 
-.. code-block:: bash
+.. code-block:: console
 
-    C:\ aqt tool windows tools_vcredist 2019-02-13-1 qt.tools.vcredist_msvc2019_x64
-    C:\ .\Qt\Tools\vcredist\vcredist_msvc2019_x64.exe /norestart /q
+    py -m aqt tool windows tools_vcredist 2019-02-13-1 qt.tools.vcredist_msvc2019_x64
+    .\Qt\Tools\vcredist\vcredist_msvc2019_x64.exe /norestart /q
 
 
 Example: Install MinGW on Windows
 
-.. code-block:: bash
+.. code-block:: console
 
-    C:\ aqt tool -O c:\Qt windows tools_mingw 8.1.0-1-202004170606 qt.tools.win64_mingw810w
-    c:\ set PATH=C:\Qt\Tools\mingw810_64\bin
+    py -m aqt tool -O c:\Qt windows tools_mingw 8.1.0-1-202004170606 qt.tools.win64_mingw810
+    set PATH=C:\Qt\Tools\mingw810_64\bin
 
 
 Example: Install Qt6 for android
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt install -O qt 6.1.0 linux desktop
     aqt install -O qt 6.1.0 linux android android_armv7
@@ -228,7 +241,7 @@ Example: Install Qt6 for android
 
 Example: Install Qt6 for ios/mac
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt install -O qt 6.1.0 mac desktop
     aqt install -O qt 6.1.0 mac ios ios
@@ -237,7 +250,7 @@ Example: Install Qt6 for ios/mac
 
 Example: Show help message
 
-.. code-block:: bash
+.. code-block:: console
 
     aqt help
 
@@ -281,12 +294,12 @@ Example:
 
 Avoid installation of py7zr, python 7zip library, and force using external 7z command to extract archives.
 
-.. code-block:: bash
+.. code-block:: console
 
-    $ pip install -U pip
-    $ pip install requests==2.25.1 packaging texttable
-    $ pip install --no-deps aqtinstall
-    $ python -m aqt --external /usr/local/bin/7z install 5.15.2 linux desktop
+    pip install -U pip
+    pip install requests==2.25.1 semantic_version texttable
+    pip install --no-deps aqtinstall
+    python -m aqt --external /usr/local/bin/7z install 5.15.2 linux desktop
 
 
 Testimonies

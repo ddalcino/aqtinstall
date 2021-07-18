@@ -1,11 +1,12 @@
 import binascii
-import logging
 import os
 
+import pytest
 import requests
 from requests.models import Response
 
 from aqt import helper
+from aqt.metadata import Version
 
 
 def test_helper_altlink(monkeypatch):
@@ -51,9 +52,11 @@ def test_helper_altlink(monkeypatch):
 
 
 def test_settings(tmp_path):
-    config = helper.Settings()
-    assert config.concurrency == 3
-    assert "http://mirror.example.com" in config.blacklist
+    helper.Settings.load_settings(
+        os.path.join(os.path.dirname(__file__), "data", "settings.ini")
+    )
+    assert helper.Settings.concurrency == 3
+    assert "http://mirror.example.com" in helper.Settings.blacklist
 
 
 def mocked_iter_content(chunk_size):
@@ -80,10 +83,7 @@ def test_helper_downloadBinary_md5(tmp_path, monkeypatch):
 
     expected = binascii.unhexlify("1d41a93e4a585bb01e4518d4af431933")
     out = tmp_path.joinpath("text.xml")
-    logger = logging.getLogger(__file__)
-    helper.downloadBinaryFile(
-        "http://example.com/test.xml", out, "md5", expected, 60, logger
-    )
+    helper.downloadBinaryFile("http://example.com/test.xml", out, "md5", expected, 60)
 
 
 def test_helper_downloadBinary_sha256(tmp_path, monkeypatch):
@@ -94,7 +94,25 @@ def test_helper_downloadBinary_sha256(tmp_path, monkeypatch):
         "07b3ef4606b712923a14816b1cfe9649687e617d030fc50f948920d784c0b1cd"
     )
     out = tmp_path.joinpath("text.xml")
-    logger = logging.getLogger(__file__)
     helper.downloadBinaryFile(
-        "http://example.com/test.xml", out, "sha256", expected, 60, logger
+        "http://example.com/test.xml", out, "sha256", expected, 60
     )
+
+
+@pytest.mark.parametrize(
+    "version, expect",
+    [
+        ("1.33.1", Version(major=1, minor=33, patch=1)),
+        (
+            "1.33.1-202102101246",
+            Version(major=1, minor=33, patch=1, build=("202102101246",)),
+        ),
+        (
+            "1.33-202102101246",
+            Version(major=1, minor=33, patch=0, build=("202102101246",)),
+        ),
+        ("2020-05-19-1", Version(major=2020, minor=0, patch=0, build=("05-19-1",))),
+    ],
+)
+def test_helper_to_version_permissive(version, expect):
+    assert Version.permissive(version) == expect
