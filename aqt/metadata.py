@@ -332,6 +332,13 @@ class ToolData:
             [name, *[content[key] for key in keys]]
             for name, content in self.tool_data.items()
         ]
+    
+    def _short_rows(self):
+        keys = ("Version", "ReleaseDate")
+        return [
+            [name, *[content[key] for key in keys]]
+            for name, content in self.tool_data.items()
+        ]
 
 
 class MetadataFactory:
