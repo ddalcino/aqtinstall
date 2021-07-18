@@ -206,7 +206,7 @@ def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
 
     def fmt_version_list(entry: List[str], depth: int) -> str:
         assert isinstance(entry, list)
-        minor_pattern = re.compile(r"^\d+\.(\d+)\.\d+")
+        minor_pattern = re.compile(r"^\d+\.(\d+)(\.\d+)?")
 
         def iter_minor_versions():
             if len(entry) == 0:
@@ -260,6 +260,9 @@ def compare_combos(
 
     has_difference = False
 
+    # Don't compare data pulled from previous file
+    skipped_keys = ("new_archive",)
+
     def compare_modules_entry(actual_mod_item: Dict, expect_mod_item: Dict) -> bool:
         """Return True if difference detected. Print description of difference."""
         version = actual_mod_item["qt_version"]
@@ -302,6 +305,9 @@ def compare_combos(
         return True
 
     for root_key in actual_combos.keys():
+        if root_key in skipped_keys:
+            continue
+
         print(f"\nComparing {root_key}:\n{'-' * 40}")
         if root_key == "modules":
             for actual_row, expect_row in zip(
