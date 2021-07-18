@@ -333,33 +333,6 @@ class ToolData:
             for name, content in self.tool_data.items()
         ]
 
-    def _short_rows(self):
-        keys = ("Version", "ReleaseDate")
-        return [
-            [name, *[content[key] for key in keys]]
-            for name, content in self.tool_data.items()
-        ]
-
-
-def fetch_new_archive_versions(
-    qt_major: int, qt_minor_range: Iterable[int]
-) -> Versions:
-    def to_version(v: str) -> Optional[Version]:
-        try:
-            return Version(v)
-        except ValueError:
-            return None
-
-    def iterate_versions() -> Generator[Tuple[int, List[Version]], None, None]:
-        for qt_minor in qt_minor_range:
-            html_doc = MetadataFactory.fetch_http(
-                rest_of_url=f"new_archive/qt/{qt_major}.{qt_minor}/"
-            )
-            folders = MetadataFactory.iterate_folders(html_doc)
-            yield qt_minor, list(filter(None, map(to_version, sorted(folders))))
-
-    return Versions(list(iterate_versions()))
-
 
 class MetadataFactory:
     """Retrieve metadata of Qt variations, versions, and descriptions from Qt site."""
