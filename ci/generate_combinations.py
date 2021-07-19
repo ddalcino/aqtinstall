@@ -21,7 +21,7 @@ from typing import (
 
 from git import Repo
 from github import Github
-from tqdm import tqdm
+from tqdm import tqdm as base_tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings
@@ -422,6 +422,7 @@ def main(filename: Path, is_make_pull_request: bool) -> int:
         )
 
         if not diff:
+            print(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
         if is_make_pull_request:
             write_combinations_json(actual, filename)
@@ -435,6 +436,10 @@ def main(filename: Path, is_make_pull_request: bool) -> int:
         return 1
 
 
+def local_tqdm(disable: bool):
+    return lambda *args: base_tqdm(*args, disable=disable)
+
+
 if __name__ == "__main__":
     Settings.load_settings()
     describe_env()
@@ -445,6 +450,12 @@ if __name__ == "__main__":
         print(
             "This program compares 'combinations.json' to what is actually present at download.qt.io.\n"
             f"The command '{sys.argv[0]} make_PR' will make a pull request if there are differences.\n"
+            f"The command '{sys.argv[0]} disable_tqdm' will disable tqdm to make CI logs easier to read.\n"
         )
         exit(0)
-    exit(main(filename=combos_json_filename, is_make_pull_request=len(sys.argv) > 1 and sys.argv[1] == "make_PR"))
+
+    is_make_pull_request = len(sys.argv) > 1 and sys.argv[1] == "make_PR"
+    is_disable_tqdm = is_make_pull_request or (len(sys.argv) > 1 and sys.argv[1] == "disable_tqdm")
+    tqdm = local_tqdm(is_disable_tqdm)
+
+    exit(main(combos_json_filename, is_make_pull_request))
