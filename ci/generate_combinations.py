@@ -342,6 +342,21 @@ def write_combinations_json(
         raise RuntimeError("Failed to write file!")
 
 
+def describe_env():
+    token = os.getenv("GITHUB_TOKEN")
+    repo_name = os.getenv("GITHUB_REPOSITORY")
+    run_id = os.getenv("GITHUB_RUN_ID")
+
+    print(
+        textwrap.dedent(f"""
+        Environment:
+        Token: {token}
+        Repo name: {repo_name}
+        Run id: {run_id}
+        """)
+    )
+
+
 def commit_changes(file_to_commit: Path):
     """
     $ git add aqt/combinations.json
@@ -354,7 +369,7 @@ def commit_changes(file_to_commit: Path):
     assert repo.is_dirty()
 
     repo.git.add(file_to_commit)
-    ok = repo.git.commit(m="Update `aqt/combinations.json`")
+    ok = repo.git.commit(m=f"Update `{file_to_commit}`")
 
     if not ok:
         raise RuntimeError("Failed to commit changes!")
@@ -389,11 +404,10 @@ def open_pull_request():
         raise RuntimeError("Failed to create pull request!")
 
 
-def main(is_make_pull_request: bool) -> int:
+def main(filename: Path, is_make_pull_request: bool) -> int:
     logger = logging.getLogger("aqt.generate_combos")
-    combos_json_filename = Path(__file__).parent / "combinations.json"
     try:
-        expect = json.loads(combos_json_filename.read_text())
+        expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
         actual = generate_combos(new_archive=expect[0]["new_archive"])
 
@@ -402,16 +416,16 @@ def main(is_make_pull_request: bool) -> int:
         print(pretty_print_combos(actual))
 
         print("=" * 80)
-        print("Comparison with existing 'combinations.json':")
+        print(f"Comparison with existing '{filename}':")
         diff = compare_combos(
-            actual, expect[0], "program_output", "combinations.json", print
+            actual, expect[0], "program_output", str(filename), print
         )
 
         if not diff:
             return 0  # no difference
         if is_make_pull_request:
-            write_combinations_json(actual, combos_json_filename)
-            commit_changes(combos_json_filename)
+            write_combinations_json(actual, filename)
+            commit_changes(filename)
             open_pull_request()
             return 0  # PR request made successfully
         return 1  # difference reported
@@ -423,6 +437,9 @@ def main(is_make_pull_request: bool) -> int:
 
 if __name__ == "__main__":
     Settings.load_settings()
+    describe_env()
+    combos_json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
+    print(f"File to modify: {combos_json_filename}")
 
     if len(sys.argv) > 1 and sys.argv[1] == "help":
         print(
@@ -430,4 +447,4 @@ if __name__ == "__main__":
             f"The command '{sys.argv[0]} make_PR' will make a pull request if there are differences.\n"
         )
         exit(0)
-    exit(main(is_make_pull_request=len(sys.argv) > 1 and sys.argv[1] == "make_PR"))
+    exit(main(filename=combos_json_filename, is_make_pull_request=len(sys.argv) > 1 and sys.argv[1] == "make_PR"))
