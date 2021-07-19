@@ -18,5 +18,5 @@ jobs:
       with:
         python-version: 3.8
     - run: pip install PyGithub GitPython tqdm
-    - run: python3 ci/generate_combinations.py #make_PR
+    - run: PYTHONPATH=$(pwd) python3 ci/generate_combinations.py #make_PR
 
