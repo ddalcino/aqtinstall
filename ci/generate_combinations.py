@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import logging
 import os
 import re
-import sys
 import textwrap
 from pathlib import Path
 from typing import (
@@ -24,7 +24,7 @@ from github import Github
 from tqdm import tqdm as base_tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
-from aqt.helper import Settings
+from aqt.helper import Settings, setup_logging
 from aqt.metadata import ArchiveId, MetadataFactory, Versions
 
 
@@ -69,7 +69,7 @@ def iter_archive_ids(
 
 
 def iter_arches() -> Generator[dict, None, None]:
-    print("Fetching arches")
+    logger.info("Fetching arches")
     archive_ids = list(iter_archive_ids(categories=("qt5", "qt6"), add_extensions=True))
     for archive_id in tqdm(archive_ids):
         versions = (
@@ -92,7 +92,7 @@ def iter_arches() -> Generator[dict, None, None]:
 
 def iter_tool_variants() -> Generator[dict, None, None]:
     for archive_id in iter_archive_ids(categories=("tools",)):
-        print("Fetching tool variants for {}".format(archive_id))
+        logger.info("Fetching tool variants for {}".format(archive_id))
         for tool_name in tqdm(sorted(MetadataFactory(archive_id).getList())):
             if is_blacklisted_tool(tool_name):
                 continue
@@ -123,7 +123,7 @@ def iter_qt_minor_groups(
 def iter_modules_for_qt_minor_groups(
     host: str = "linux", target: str = "desktop"
 ) -> Generator[Dict, None, None]:
-    print("Fetching qt modules for {}/{}".format(host, target))
+    logger.info("Fetching qt modules for {}/{}".format(host, target))
     for major, minor in tqdm(list(iter_qt_minor_groups(host, target))):
         cat = f"qt{major}"
         yield {
@@ -308,7 +308,7 @@ def compare_combos(
         if root_key in skipped_keys:
             continue
 
-        print(f"\nComparing {root_key}:\n{'-' * 40}")
+        printer(f"\nComparing {root_key}:\n{'-' * 40}")
         if root_key == "modules":
             for actual_row, expect_row in zip(
                 actual_combos[root_key], expected_combos[root_key]
@@ -337,6 +337,7 @@ def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
 def write_combinations_json(
     combos: Dict[str, Union[List[Dict], List[str]]], filename: Path
 ):
+    logger.info(f"Write file {filename}")
     json_text = json.dumps(combos, sort_keys=True, indent=2)
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
@@ -347,13 +348,15 @@ def describe_env():
     repo_name = os.getenv("GITHUB_REPOSITORY")
     run_id = os.getenv("GITHUB_RUN_ID")
 
-    print(
-        textwrap.dedent(f"""
+    logger.info(
+        textwrap.dedent(
+            f"""
         Environment:
         Token: {token}
         Repo name: {repo_name}
         Run id: {run_id}
-        """)
+        """
+        )
     )
 
 
@@ -362,7 +365,7 @@ def commit_changes(file_to_commit: Path):
     $ git add aqt/combinations.json
     $ git commit -m "Update aqt/combinations.json"
     """
-    # WIP; not sure if this works
+    logger.info(f"Commit {file_to_commit}")
     working_tree_directory = os.getenv("GITHUB_WORKSPACE")
     repo = Repo(working_tree_directory)
     assert not repo.bare
@@ -371,16 +374,16 @@ def commit_changes(file_to_commit: Path):
     repo.git.add(file_to_commit)
     commit_result = repo.git.commit(m=f"Update `{file_to_commit}`")
 
-    print(commit_result)
+    logger.info(commit_result)
 
     if not commit_result:
         raise RuntimeError("Failed to commit changes!")
 
-    print(repo.git.log(n="3"))
+    logger.info(repo.git.log(n="3"))
 
 
-def open_pull_request():
-    # WIP; not sure if this works
+def open_pull_request(changes_report: str):
+    logger.info(f"Make PR")
     token = os.getenv("GITHUB_TOKEN")
     g = Github(token)
 
@@ -395,6 +398,8 @@ def open_pull_request():
     This PR will update `aqt/combinations.json` to account for those changes.
     
     Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
+    
+    {changes_report}
     """
     )
     pr = repo.create_pull(
@@ -409,7 +414,13 @@ def open_pull_request():
 
 
 def main(filename: Path, is_make_pull_request: bool) -> int:
-    logger = logging.getLogger("aqt.generate_combos")
+
+    changes_report = []
+
+    def combo_printer(msg: str):
+        changes_report.append(msg)
+        print(msg)
+
     try:
         expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
@@ -421,17 +432,16 @@ def main(filename: Path, is_make_pull_request: bool) -> int:
 
         print("=" * 80)
         print(f"Comparison with existing '{filename}':")
-        diff = compare_combos(
-            actual, expect[0], "program_output", str(filename), print
-        )
+        diff = compare_combos(actual, expect[0], "program_output", str(filename), combo_printer)
 
         if not diff:
             print(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
         if is_make_pull_request:
+            print(f"{filename} has changed; making commit and PR...")
             write_combinations_json(actual, filename)
             commit_changes(filename)
-            open_pull_request()
+            open_pull_request(changes_report)
             return 0  # PR request made successfully
         return 1  # difference reported
 
@@ -446,20 +456,31 @@ def local_tqdm(disable: bool):
 
 if __name__ == "__main__":
     Settings.load_settings()
+    setup_logging()
+    logger = logging.getLogger("aqt.generate_combos")
+
     describe_env()
     combos_json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
-    print(f"File to modify: {combos_json_filename}")
+    logger.info(f"File to modify: {combos_json_filename}")
 
-    if len(sys.argv) > 1 and sys.argv[1] == "help":
-        print(
-            "This program compares 'combinations.json' to what is actually present at download.qt.io.\n"
-            f"The command '{sys.argv[0]} make_PR' will make a pull request if there are differences.\n"
-            f"The command '{sys.argv[0]} disable_tqdm' will disable tqdm to make CI logs easier to read.\n"
-        )
-        exit(0)
+    parser = argparse.ArgumentParser(
+        description="Generate combinations.json from download.qt.io, "
+        "compare with existing file, and open PR to correct differences"
+    )
+    parser.add_argument(
+        "--pr",
+        help="make a pull request if combinations.json is out of date",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--no_tqdm",
+        help="disable progress bars (makes CI logs easier to read)",
+        action="store_true",
+    )
+    args = parser.parse_args()
 
-    is_make_pull_request = len(sys.argv) > 1 and sys.argv[1] == "make_PR"
-    is_disable_tqdm = is_make_pull_request or (len(sys.argv) > 1 and sys.argv[1] == "disable_tqdm")
-    tqdm = local_tqdm(is_disable_tqdm)
+    logger.info(f"Disable tqdm: {args.no_tqdm}\nMake PR: {args.pr}")
 
-    exit(main(combos_json_filename, is_make_pull_request))
+    tqdm = local_tqdm(args.no_tqdm)
+
+    exit(main(filename=combos_json_filename, is_make_pull_request=args.pr))
