@@ -369,10 +369,14 @@ def commit_changes(file_to_commit: Path):
     assert repo.is_dirty()
 
     repo.git.add(file_to_commit)
-    ok = repo.git.commit(m=f"Update `{file_to_commit}`")
+    commit_result = repo.git.commit(m=f"Update `{file_to_commit}`")
 
-    if not ok:
+    print(commit_result)
+
+    if not commit_result:
         raise RuntimeError("Failed to commit changes!")
+
+    print(repo.git.log(n="3"))
 
 
 def open_pull_request():
