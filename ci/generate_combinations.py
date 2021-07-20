@@ -19,8 +19,6 @@ from typing import (
     Union,
 )
 
-# from git import Repo
-# from github import Github
 from tqdm import tqdm as base_tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
@@ -335,10 +333,16 @@ def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
 
 
 def write_combinations_json(
-    combos: Dict[str, Union[List[Dict], List[str]]], filename: Path
+    combos: Dict[str, Union[List[Dict], List[str]]],
+    filename: Path,
+    is_use_pretty_print: bool = True,
 ):
     logger.info(f"Write file {filename}")
-    json_text = json.dumps(combos, sort_keys=True, indent=2)
+    json_text = (
+        pretty_print_combos(combos)
+        if is_use_pretty_print
+        else json.dumps([combos], sort_keys=True, indent=2)
+    )
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
 
@@ -356,61 +360,6 @@ def describe_env():
         """
         )
     )
-
-
-# def commit_changes(file_to_commit: Path):
-#     """
-#     $ git add aqt/combinations.json
-#     $ git commit -m "Update aqt/combinations.json"
-#     """
-#     logger.info(f"Commit {file_to_commit}")
-#     working_tree_directory = os.getenv("GITHUB_WORKSPACE")
-#     repo = Repo(working_tree_directory)
-#     assert not repo.bare
-#     assert repo.is_dirty()
-#
-#     repo.git.add(file_to_commit)
-#     commit_result = repo.git.commit(m=f"Update `{file_to_commit}`")
-#
-#     logger.info(commit_result)
-#
-#     if not commit_result:
-#         raise RuntimeError("Failed to commit changes!")
-#
-#     logger.info(repo.git.log(n="3"))
-#
-#
-# def open_pull_request(changes_report: str):
-#     logger.info(f"Make PR")
-#     token = os.getenv("GITHUB_TOKEN")
-#     g = Github(token)
-#
-#     repo_name = os.getenv("GITHUB_REPOSITORY")
-#     repo = g.get_repo(repo_name)
-#
-#     run_id = os.getenv("GITHUB_RUN_ID")
-#     body = textwrap.dedent(
-#         f"""\
-#     SUMMARY
-#     The `aqt/generate_combinations` script has detected changes to the repo at https://download.qt.io.
-#     This PR will update `aqt/combinations.json` to account for those changes.
-#
-#     Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
-#
-#     ```
-#     {changes_report}
-#     ```
-#     """
-#     )
-#     pr = repo.create_pull(
-#         title="Update combinations.json",
-#         body=body,
-#         head="develop",
-#         base="master",
-#         maintainer_can_modify=True,
-#     )
-#     if not pr:
-#         raise RuntimeError("Failed to create pull request!")
 
 
 def main(filename: Path, is_write_file: bool) -> int:
@@ -432,7 +381,9 @@ def main(filename: Path, is_write_file: bool) -> int:
 
         print("=" * 80)
         print(f"Comparison with existing '{filename}':")
-        diff = compare_combos(actual, expect[0], "program_output", str(filename), combo_printer)
+        diff = compare_combos(
+            actual, expect[0], "program_output", str(filename), combo_printer
+        )
 
         if not diff:
             print(f"{filename} is up to date! No PR is necessary this time!")

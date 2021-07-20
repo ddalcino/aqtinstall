@@ -1,7 +1,8 @@
 name: "Check combinations.json"
 on:
-  # Run at midnight on the first of every month
   schedule:
+  # Run at midnight on the first of every month
+  # https://crontab.guru/once-a-month
   - cron: "0 0 1 * *"
 
   push:
@@ -44,7 +45,7 @@ jobs:
           Posted from [the `check_combinations` action](https://github.com/${{ env.GITHUB_REPOSITORY }}/actions/runs/${{ env.GITHUB_RUN_ID }})
 
         branch: "update-combinations"
-        path: "aqt/"
+        path: "aqt/combinations.json"
         commit-message: "Update aqt/combinations.json"
         author: "Qt Repo Watchbot <ddalcino@gmail.com>"
 
