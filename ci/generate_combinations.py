@@ -19,8 +19,8 @@ from typing import (
     Union,
 )
 
-from git import Repo
-from github import Github
+# from git import Repo
+# from github import Github
 from tqdm import tqdm as base_tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
@@ -344,7 +344,6 @@ def write_combinations_json(
 
 
 def describe_env():
-    token = os.getenv("GITHUB_TOKEN")
     repo_name = os.getenv("GITHUB_REPOSITORY")
     run_id = os.getenv("GITHUB_RUN_ID")
 
@@ -352,7 +351,6 @@ def describe_env():
         textwrap.dedent(
             f"""
         Environment:
-        Token: {token}
         Repo name: {repo_name}
         Run id: {run_id}
         """
@@ -360,62 +358,62 @@ def describe_env():
     )
 
 
-def commit_changes(file_to_commit: Path):
-    """
-    $ git add aqt/combinations.json
-    $ git commit -m "Update aqt/combinations.json"
-    """
-    logger.info(f"Commit {file_to_commit}")
-    working_tree_directory = os.getenv("GITHUB_WORKSPACE")
-    repo = Repo(working_tree_directory)
-    assert not repo.bare
-    assert repo.is_dirty()
+# def commit_changes(file_to_commit: Path):
+#     """
+#     $ git add aqt/combinations.json
+#     $ git commit -m "Update aqt/combinations.json"
+#     """
+#     logger.info(f"Commit {file_to_commit}")
+#     working_tree_directory = os.getenv("GITHUB_WORKSPACE")
+#     repo = Repo(working_tree_directory)
+#     assert not repo.bare
+#     assert repo.is_dirty()
+#
+#     repo.git.add(file_to_commit)
+#     commit_result = repo.git.commit(m=f"Update `{file_to_commit}`")
+#
+#     logger.info(commit_result)
+#
+#     if not commit_result:
+#         raise RuntimeError("Failed to commit changes!")
+#
+#     logger.info(repo.git.log(n="3"))
+#
+#
+# def open_pull_request(changes_report: str):
+#     logger.info(f"Make PR")
+#     token = os.getenv("GITHUB_TOKEN")
+#     g = Github(token)
+#
+#     repo_name = os.getenv("GITHUB_REPOSITORY")
+#     repo = g.get_repo(repo_name)
+#
+#     run_id = os.getenv("GITHUB_RUN_ID")
+#     body = textwrap.dedent(
+#         f"""\
+#     SUMMARY
+#     The `aqt/generate_combinations` script has detected changes to the repo at https://download.qt.io.
+#     This PR will update `aqt/combinations.json` to account for those changes.
+#
+#     Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
+#
+#     ```
+#     {changes_report}
+#     ```
+#     """
+#     )
+#     pr = repo.create_pull(
+#         title="Update combinations.json",
+#         body=body,
+#         head="develop",
+#         base="master",
+#         maintainer_can_modify=True,
+#     )
+#     if not pr:
+#         raise RuntimeError("Failed to create pull request!")
 
-    repo.git.add(file_to_commit)
-    commit_result = repo.git.commit(m=f"Update `{file_to_commit}`")
 
-    logger.info(commit_result)
-
-    if not commit_result:
-        raise RuntimeError("Failed to commit changes!")
-
-    logger.info(repo.git.log(n="3"))
-
-
-def open_pull_request(changes_report: str):
-    logger.info(f"Make PR")
-    token = os.getenv("GITHUB_TOKEN")
-    g = Github(token)
-
-    repo_name = os.getenv("GITHUB_REPOSITORY")
-    repo = g.get_repo(repo_name)
-
-    run_id = os.getenv("GITHUB_RUN_ID")
-    body = textwrap.dedent(
-        f"""\
-    SUMMARY
-    The `aqt/generate_combinations` script has detected changes to the repo at https://download.qt.io.
-    This PR will update `aqt/combinations.json` to account for those changes.
-    
-    Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
-    
-    ```
-    {changes_report}
-    ```
-    """
-    )
-    pr = repo.create_pull(
-        title="Update combinations.json",
-        body=body,
-        head="develop",
-        base="master",
-        maintainer_can_modify=True,
-    )
-    if not pr:
-        raise RuntimeError("Failed to create pull request!")
-
-
-def main(filename: Path, is_make_pull_request: bool) -> int:
+def main(filename: Path, is_write_file: bool) -> int:
 
     changes_report = []
 
@@ -439,11 +437,11 @@ def main(filename: Path, is_make_pull_request: bool) -> int:
         if not diff:
             print(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
-        if is_make_pull_request:
-            print(f"{filename} has changed; making commit and PR...")
+        if is_write_file:
+            print(f"{filename} has changed; writing changes to file...")
             write_combinations_json(actual, filename)
-            commit_changes(filename)
-            open_pull_request("\n".join(changes_report))
+            # commit_changes(filename)
+            # open_pull_request("\n".join(changes_report))
             return 0  # PR request made successfully
         return 1  # difference reported
 
@@ -462,16 +460,16 @@ if __name__ == "__main__":
     logger = logging.getLogger("aqt.generate_combos")
 
     describe_env()
-    combos_json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
-    logger.info(f"File to modify: {combos_json_filename}")
+    json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
+    logger.info(f"File to modify: {json_filename}")
 
     parser = argparse.ArgumentParser(
         description="Generate combinations.json from download.qt.io, "
-        "compare with existing file, and open PR to correct differences"
+        "compare with existing file, and write file to correct differences"
     )
     parser.add_argument(
-        "--pr",
-        help="make a pull request if combinations.json is out of date",
+        "--write",
+        help="write to combinations.json if changes detected",
         action="store_true",
     )
     parser.add_argument(
@@ -481,8 +479,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logger.info(f"Disable tqdm: {args.no_tqdm}\nMake PR: {args.pr}")
+    logger.info(f"Disable tqdm: {args.no_tqdm}\nWrite {json_filename}: {args.write}")
 
     tqdm = local_tqdm(args.no_tqdm)
 
-    exit(main(filename=combos_json_filename, is_make_pull_request=args.pr))
+    exit(main(filename=json_filename, is_write_file=args.write))
