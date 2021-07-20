@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import logging
-import os
 import re
-import sys
-import textwrap
 from pathlib import Path
 from typing import (
-    Callable,
     Dict,
     Generator,
     Iterator,
@@ -19,12 +16,8 @@ from typing import (
     Union,
 )
 
-from git import Repo
-from github import Github
-from tqdm import tqdm
-
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
-from aqt.helper import Settings
+from aqt.helper import Settings, setup_logging
 from aqt.metadata import ArchiveId, MetadataFactory, Versions
 
 
@@ -69,7 +62,7 @@ def iter_archive_ids(
 
 
 def iter_arches() -> Generator[dict, None, None]:
-    print("Fetching arches")
+    logger.info("Fetching arches")
     archive_ids = list(iter_archive_ids(categories=("qt5", "qt6"), add_extensions=True))
     for archive_id in tqdm(archive_ids):
         versions = (
@@ -92,7 +85,7 @@ def iter_arches() -> Generator[dict, None, None]:
 
 def iter_tool_variants() -> Generator[dict, None, None]:
     for archive_id in iter_archive_ids(categories=("tools",)):
-        print("Fetching tool variants for {}".format(archive_id))
+        logger.info("Fetching tool variants for {}".format(archive_id))
         for tool_name in tqdm(sorted(MetadataFactory(archive_id).getList())):
             if is_blacklisted_tool(tool_name):
                 continue
@@ -123,7 +116,7 @@ def iter_qt_minor_groups(
 def iter_modules_for_qt_minor_groups(
     host: str = "linux", target: str = "desktop"
 ) -> Generator[Dict, None, None]:
-    print("Fetching qt modules for {}/{}".format(host, target))
+    logger.info("Fetching qt modules for {}/{}".format(host, target))
     for major, minor in tqdm(list(iter_qt_minor_groups(host, target))):
         cat = f"qt{major}"
         yield {
@@ -253,7 +246,6 @@ def compare_combos(
     expected_combos: Dict[str, Union[List[str], List[Dict]]],
     actual_name: str,
     expect_name: str,
-    printer: Callable,
 ) -> bool:
     # list_of_str_keys: the values attached to these keys are List[str]
     list_of_str_keys = "versions", "new_archive"
@@ -272,11 +264,11 @@ def compare_combos(
         mods_missing_from_actual = expect_modules - actual_modules
         mods_missing_from_expect = actual_modules - expect_modules
         if mods_missing_from_actual:
-            printer(
+            logger.info(
                 f"{actual_name}['modules'] for Qt {version} is missing {mods_missing_from_actual}"
             )
         if mods_missing_from_expect:
-            printer(
+            logger.info(
                 f"{expect_name}['modules'] for Qt {version} is missing {mods_missing_from_expect}"
             )
         return bool(mods_missing_from_actual) or bool(mods_missing_from_expect)
@@ -296,19 +288,19 @@ def compare_combos(
         missing_from_superset = sorted(superset - subset)
         if not missing_from_superset:
             return False
-        printer(f"{subset_name}['{key}'] is missing these entries:")
+        logger.info(f"{subset_name}['{key}'] is missing these entries:")
         if key in list_of_str_keys:
-            printer(format(missing_from_superset))
+            logger.info(format(missing_from_superset))
             return True
         for el in missing_from_superset:
-            printer(format(el))
+            logger.info(format(el))
         return True
 
     for root_key in actual_combos.keys():
         if root_key in skipped_keys:
             continue
 
-        print(f"\nComparing {root_key}:\n{'-' * 40}")
+        logger.info(f"\nComparing {root_key}:\n{'-' * 40}")
         if root_key == "modules":
             for actual_row, expect_row in zip(
                 actual_combos[root_key], expected_combos[root_key]
@@ -335,99 +327,80 @@ def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
 
 
 def write_combinations_json(
-    combos: Dict[str, Union[List[Dict], List[str]]], filename: Path
+    combos: Dict[str, Union[List[Dict], List[str]]],
+    filename: Path,
+    is_use_pretty_print: bool = True,
 ):
-    json_text = json.dumps(combos, sort_keys=True, indent=2)
+    logger.info(f"Write file {filename}")
+    json_text = (
+        pretty_print_combos(combos)
+        if is_use_pretty_print
+        else json.dumps([combos], sort_keys=True, indent=2)
+    )
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
 
 
-def commit_changes(file_to_commit: Path):
-    """
-    $ git add aqt/combinations.json
-    $ git commit -m "Update aqt/combinations.json"
-    """
-    # WIP; not sure if this works
-    working_tree_directory = os.getenv("GITHUB_WORKSPACE")
-    repo = Repo(working_tree_directory)
-    assert not repo.bare
-    assert repo.is_dirty()
-
-    repo.git.add(file_to_commit)
-    ok = repo.git.commit(m="Update `aqt/combinations.json`")
-
-    if not ok:
-        raise RuntimeError("Failed to commit changes!")
-
-
-def open_pull_request():
-    # WIP; not sure if this works
-    token = os.getenv("GITHUB_TOKEN")
-    g = Github(token)
-
-    repo_name = os.getenv("GITHUB_REPOSITORY")
-    repo = g.get_repo(repo_name)
-
-    run_id = os.getenv("GITHUB_RUN_ID")
-    body = textwrap.dedent(
-        f"""\
-    SUMMARY
-    The `aqt/generate_combinations` script has detected changes to the repo at https://download.qt.io.
-    This PR will update `aqt/combinations.json` to account for those changes.
-    
-    Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
-    """
-    )
-    pr = repo.create_pull(
-        title="Update combinations.json",
-        body=body,
-        head="develop",
-        base="master",
-        maintainer_can_modify=True,
-    )
-    if not pr:
-        raise RuntimeError("Failed to create pull request!")
-
-
-def main(is_make_pull_request: bool) -> int:
-    logger = logging.getLogger("aqt.generate_combos")
-    combos_json_filename = Path(__file__).parent / "combinations.json"
+def main(filename: Path, is_write_file: bool) -> int:
     try:
-        expect = json.loads(combos_json_filename.read_text())
+        expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
         actual = generate_combos(new_archive=expect[0]["new_archive"])
 
-        print("=" * 80)
-        print("Program Output:")
-        print(pretty_print_combos(actual))
+        logger.info("=" * 80)
+        logger.info("Program Output:")
+        logger.info(pretty_print_combos(actual))
 
-        print("=" * 80)
-        print("Comparison with existing 'combinations.json':")
-        diff = compare_combos(
-            actual, expect[0], "program_output", "combinations.json", print
-        )
+        logger.info("=" * 80)
+        logger.info(f"Comparison with existing '{filename}':")
+        diff = compare_combos(actual, expect[0], "program_output", str(filename))
+        logger.info("=" * 80)
 
         if not diff:
+            print(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
-        if is_make_pull_request:
-            write_combinations_json(actual, combos_json_filename)
-            commit_changes(combos_json_filename)
-            open_pull_request()
-            return 0  # PR request made successfully
+        if is_write_file:
+            print(f"{filename} has changed; writing changes to file...")
+            write_combinations_json(actual, filename)
+            return 0  # file written successfully
         return 1  # difference reported
 
     except (ArchiveConnectionError, ArchiveDownloadError) as e:
-        logger.error("{}".format(e))
+        logger.error(format(e))
         return 1
+
+
+def get_tqdm(disable: bool):
+    if disable:
+        return lambda x: x
+
+    from tqdm import tqdm as base_tqdm
+    return lambda *a: base_tqdm(*a, disable=disable)
 
 
 if __name__ == "__main__":
     Settings.load_settings()
+    setup_logging()
+    logger = logging.getLogger("aqt.generate_combos")
 
-    if len(sys.argv) > 1 and sys.argv[1] == "help":
-        print(
-            "This program compares 'combinations.json' to what is actually present at download.qt.io.\n"
-            f"The command '{sys.argv[0]} make_PR' will make a pull request if there are differences.\n"
-        )
-        exit(0)
-    exit(main(is_make_pull_request=len(sys.argv) > 1 and sys.argv[1] == "make_PR"))
+    json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
+
+    parser = argparse.ArgumentParser(
+        description="Generate combinations.json from download.qt.io, "
+        "compare with existing file, and write file to correct differences"
+    )
+    parser.add_argument(
+        "--write",
+        help="write to combinations.json if changes detected",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--no-tqdm",
+        help="disable progress bars (makes CI logs easier to read)",
+        action="store_true",
+    )
+    args = parser.parse_args()
+
+    tqdm = get_tqdm(args.no_tqdm)
+
+    exit(main(filename=json_filename, is_write_file=args.write))
