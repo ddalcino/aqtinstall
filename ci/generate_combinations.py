@@ -399,7 +399,9 @@ def open_pull_request(changes_report: str):
     
     Posted from [the `generate_combinations` action](https://github.com/{repo_name}/actions/runs/{run_id})
     
+    ```
     {changes_report}
+    ```
     """
     )
     pr = repo.create_pull(
@@ -441,7 +443,7 @@ def main(filename: Path, is_make_pull_request: bool) -> int:
             print(f"{filename} has changed; making commit and PR...")
             write_combinations_json(actual, filename)
             commit_changes(filename)
-            open_pull_request(changes_report)
+            open_pull_request("\n".join(changes_report))
             return 0  # PR request made successfully
         return 1  # difference reported
 
@@ -473,7 +475,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--no_tqdm",
+        "--no-tqdm",
         help="disable progress bars (makes CI logs easier to read)",
         action="store_true",
     )
