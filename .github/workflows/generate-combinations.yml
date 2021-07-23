@@ -26,7 +26,7 @@ jobs:
         python -m pip install ./ --user
 
     - name: Install generate_combinations dependencies
-      run: pip install tqdm   # PyGithub GitPython
+      run: pip install -U tqdm jsoncomparison
 
     - name: Check combinations.json
       run: PYTHONPATH=$(pwd) python3 ci/generate_combinations.py --write --no-tqdm
