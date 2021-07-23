@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import textwrap
 from pathlib import Path
 from typing import (
@@ -19,6 +18,7 @@ from typing import (
     Union,
 )
 
+from jsoncomparison import Compare, NO_DIFF
 from tqdm import tqdm as base_tqdm
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
@@ -167,182 +167,17 @@ def generate_combos(new_archive: List[str]):
     }
 
 
-def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
-    """
-    Attempts to mimic the formatting of the existing combinations.json.
-    """
-
-    def fmt_dict_entry(entry: Dict, depth: int) -> str:
-        return '{}{{"os_name": {:<10} "target": {:<10} {}"arch": "{}"}}'.format(
-            "  " * depth,
-            f'"{entry["os_name"]}",',
-            f'"{entry["target"]}",',
-            (
-                f'"tool_name": "{entry["tool_name"]}", '
-                if "tool_name" in entry.keys()
-                else ""
-            ),
-            entry["arch"],
-        )
-
-    def span_multiline(line: str, max_width: int, depth: int) -> str:
-        window = (0, max_width)
-        indent = "  " * (depth + 1)
-        while len(line) - window[0] > max_width:
-            break_loc = line.rfind(" ", window[0], window[1])
-            line = line[:break_loc] + "\n" + indent + line[break_loc + 1 :]
-            window = (break_loc + len(indent), break_loc + len(indent) + max_width)
-        return line
-
-    def fmt_module_entry(entry: Dict, depth: int = 0) -> str:
-        line = '{}{{"qt_version": "{}", "modules": [{}]}}'.format(
-            "  " * depth,
-            entry["qt_version"],
-            ", ".join([f'"{s}"' for s in entry["modules"]]),
-        )
-        return span_multiline(line, 120, depth)
-
-    def fmt_version_list(entry: List[str], depth: int) -> str:
-        assert isinstance(entry, list)
-        minor_pattern = re.compile(r"^\d+\.(\d+)(\.\d+)?")
-
-        def iter_minor_versions():
-            if len(entry) == 0:
-                return
-            begin_index = 0
-            current_minor_ver = int(minor_pattern.match(entry[begin_index]).group(1))
-            for i, ver in enumerate(entry):
-                minor = int(minor_pattern.match(ver).group(1))
-                if minor != current_minor_ver:
-                    yield entry[begin_index:i]
-                    begin_index = i
-                    current_minor_ver = minor
-            yield entry[begin_index:]
-
-        joiner = ",\n" + "  " * depth
-        line = joiner.join(
-            [
-                ", ".join([f'"{ver}"' for ver in minor_group])
-                for minor_group in iter_minor_versions()
-            ]
-        )
-
-        return line
-
-    root_element_strings = [
-        f'"{key}": [\n'
-        + ",\n".join([item_formatter(item, depth=1) for item in combos[key]])
-        + "\n]"
-        for key, item_formatter in (
-            ("qt", fmt_dict_entry),
-            ("tools", fmt_dict_entry),
-            ("modules", fmt_module_entry),
-        )
-    ] + [
-        f'"{key}": [\n  ' + fmt_version_list(combos[key], depth=1) + "\n]"
-        for key in ("versions", "new_archive")
-    ]
-
-    return "[{" + ", ".join(root_element_strings) + "}]"
-
-
-def compare_combos(
-    actual_combos: Dict[str, Union[List[str], List[Dict]]],
-    expected_combos: Dict[str, Union[List[str], List[Dict]]],
-    actual_name: str,
-    expect_name: str,
-    printer: Callable,
-) -> bool:
-    # list_of_str_keys: the values attached to these keys are List[str]
-    list_of_str_keys = "versions", "new_archive"
-
-    has_difference = False
-
-    # Don't compare data pulled from previous file
-    skipped_keys = ("new_archive",)
-
-    def compare_modules_entry(actual_mod_item: Dict, expect_mod_item: Dict) -> bool:
-        """Return True if difference detected. Print description of difference."""
-        version = actual_mod_item["qt_version"]
-        actual_modules, expect_modules = set(actual_mod_item["modules"]), set(
-            expect_mod_item["modules"]
-        )
-        mods_missing_from_actual = expect_modules - actual_modules
-        mods_missing_from_expect = actual_modules - expect_modules
-        if mods_missing_from_actual:
-            printer(
-                f"{actual_name}['modules'] for Qt {version} is missing {mods_missing_from_actual}"
-            )
-        if mods_missing_from_expect:
-            printer(
-                f"{expect_name}['modules'] for Qt {version} is missing {mods_missing_from_expect}"
-            )
-        return bool(mods_missing_from_actual) or bool(mods_missing_from_expect)
-
-    def to_set(a_list: Union[List[str], List[Dict]]) -> Set:
-        if len(a_list) == 0:
-            return set()
-        if isinstance(a_list[0], str):
-            return set(a_list)
-        assert isinstance(a_list[0], Dict)
-        return set([str(a_dict) for a_dict in a_list])
-
-    def report_difference(
-        superset: Set, subset: Set, subset_name: str, key: str
-    ) -> bool:
-        """Return True if difference detected. Print description of difference."""
-        missing_from_superset = sorted(superset - subset)
-        if not missing_from_superset:
-            return False
-        printer(f"{subset_name}['{key}'] is missing these entries:")
-        if key in list_of_str_keys:
-            printer(format(missing_from_superset))
-            return True
-        for el in missing_from_superset:
-            printer(format(el))
-        return True
-
-    for root_key in actual_combos.keys():
-        if root_key in skipped_keys:
-            continue
-
-        printer(f"\nComparing {root_key}:\n{'-' * 40}")
-        if root_key == "modules":
-            for actual_row, expect_row in zip(
-                actual_combos[root_key], expected_combos[root_key]
-            ):
-                assert actual_row["qt_version"] == expect_row["qt_version"]
-                has_difference |= compare_modules_entry(actual_row, expect_row)
-            continue
-
-        actual_set = to_set(actual_combos[root_key])
-        expected_set = to_set(expected_combos[root_key])
-        has_difference |= report_difference(
-            expected_set, actual_set, actual_name, root_key
-        )
-        has_difference |= report_difference(
-            actual_set, expected_set, expect_name, root_key
-        )
-
-    return has_difference
-
-
 def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
     for i, item in enumerate(combos["modules"]):
         combos["modules"][i]["modules"] = sorted(item["modules"])
 
 
 def write_combinations_json(
-    combos: Dict[str, Union[List[Dict], List[str]]],
+    combos: List[Dict[str, Union[List[Dict], List[str]]]],
     filename: Path,
-    is_use_pretty_print: bool = True,
 ):
     logger.info(f"Write file {filename}")
-    json_text = (
-        pretty_print_combos(combos)
-        if is_use_pretty_print
-        else json.dumps([combos], sort_keys=True, indent=2)
-    )
+    json_text = json.dumps(combos, sort_keys=True, indent=2)
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
 
@@ -362,42 +197,35 @@ def describe_env():
     )
 
 
-def main(filename: Path, is_write_file: bool) -> int:
-
-    changes_report = []
-
-    def combo_printer(msg: str):
-        changes_report.append(msg)
-        logger.info(msg)
+def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
 
     try:
         expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
-        actual = generate_combos(new_archive=expect[0]["new_archive"])
+        actual = [generate_combos(new_archive=expect[0]["new_archive"])]
+        diff = Compare().check(expect, actual)
 
-        logger.info("=" * 80)
-        logger.info("Program Output:")
-        logger.info(pretty_print_combos(actual))
+        if is_verbose:
+            logger.info("=" * 80)
+            logger.info("Program Output:")
+            logger.info(json.dumps(actual, sort_keys=True, indent=2))
 
-        logger.info("=" * 80)
-        logger.info(f"Comparison with existing '{filename}':")
-        diff = compare_combos(
-            actual, expect[0], "program_output", str(filename), combo_printer
-        )
+            logger.info("=" * 80)
+            logger.info(f"Comparison with existing '{filename}':")
+            logger.info(json.dumps(diff, sort_keys=True, indent=2))
 
-        if not diff:
+        if diff == NO_DIFF:
             logger.info(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
         if is_write_file:
             logger.info(f"{filename} has changed; writing changes to file...")
             write_combinations_json(actual, filename)
-            # commit_changes(filename)
-            # open_pull_request("\n".join(changes_report))
-            return 0  # PR request made successfully
+            return 0  # File written successfully
+        logger.warning(f"{filename} is out of date, but no changes were written")
         return 1  # difference reported
 
     except (ArchiveConnectionError, ArchiveDownloadError) as e:
-        logger.error("{}".format(e))
+        logger.error(format(e))
         return 1
 
 
@@ -428,10 +256,15 @@ if __name__ == "__main__":
         help="disable progress bars (makes CI logs easier to read)",
         action="store_true",
     )
+    parser.add_argument(
+        "--verbose",
+        help="Print a json dump of the new file, and an abbreviated diff with the old file",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     logger.info(f"Disable tqdm: {args.no_tqdm}\nWrite {json_filename}: {args.write}")
 
     tqdm = local_tqdm(args.no_tqdm)
 
-    exit(main(filename=json_filename, is_write_file=args.write))
+    exit(main(filename=json_filename, is_write_file=args.write, is_verbose=args.verbose))
