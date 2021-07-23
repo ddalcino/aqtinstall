@@ -368,28 +368,28 @@ def main(filename: Path, is_write_file: bool) -> int:
 
     def combo_printer(msg: str):
         changes_report.append(msg)
-        print(msg)
+        logger.info(msg)
 
     try:
         expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
         actual = generate_combos(new_archive=expect[0]["new_archive"])
 
-        print("=" * 80)
-        print("Program Output:")
-        print(pretty_print_combos(actual))
+        logger.info("=" * 80)
+        logger.info("Program Output:")
+        logger.info(pretty_print_combos(actual))
 
-        print("=" * 80)
-        print(f"Comparison with existing '{filename}':")
+        logger.info("=" * 80)
+        logger.info(f"Comparison with existing '{filename}':")
         diff = compare_combos(
             actual, expect[0], "program_output", str(filename), combo_printer
         )
 
         if not diff:
-            print(f"{filename} is up to date! No PR is necessary this time!")
+            logger.info(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
         if is_write_file:
-            print(f"{filename} has changed; writing changes to file...")
+            logger.info(f"{filename} has changed; writing changes to file...")
             write_combinations_json(actual, filename)
             # commit_changes(filename)
             # open_pull_request("\n".join(changes_report))
