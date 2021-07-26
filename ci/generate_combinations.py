@@ -3,8 +3,9 @@
 import argparse
 import json
 import logging
+import re
 from pathlib import Path
-from typing import Dict, Generator, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Generator, Iterator, List, Optional, Tuple, Union, Set
 
 from jsoncomparison import NO_DIFF, Compare
 
@@ -158,6 +159,165 @@ def write_combinations_json(
         raise RuntimeError("Failed to write file!")
 
 
+def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
+    """
+    Attempts to mimic the formatting of the existing combinations.json.
+    """
+
+    def fmt_dict_entry(entry: Dict, depth: int) -> str:
+        return '{}{{"os_name": {:<10} "target": {:<10} {}"arch": "{}"}}'.format(
+            "  " * depth,
+            f'"{entry["os_name"]}",',
+            f'"{entry["target"]}",',
+            (
+                f'"tool_name": "{entry["tool_name"]}", '
+                if "tool_name" in entry.keys()
+                else ""
+            ),
+            entry["arch"],
+        )
+
+    def span_multiline(line: str, max_width: int, depth: int) -> str:
+        window = (0, max_width)
+        indent = "  " * (depth + 1)
+        while len(line) - window[0] > max_width:
+            break_loc = line.rfind(" ", window[0], window[1])
+            line = line[:break_loc] + "\n" + indent + line[break_loc + 1:]
+            window = (break_loc + len(indent), break_loc + len(indent) + max_width)
+        return line
+
+    def fmt_module_entry(entry: Dict, depth: int = 0) -> str:
+        line = '{}{{"qt_version": "{}", "modules": [{}]}}'.format(
+            "  " * depth,
+            entry["qt_version"],
+            ", ".join([f'"{s}"' for s in entry["modules"]]),
+        )
+        return span_multiline(line, 120, depth)
+
+    def fmt_version_list(entry: List[str], depth: int) -> str:
+        assert isinstance(entry, list)
+        minor_pattern = re.compile(r"^\d+\.(\d+)(\.\d+)?")
+
+        def iter_minor_versions():
+            if len(entry) == 0:
+                return
+            begin_index = 0
+            current_minor_ver = int(minor_pattern.match(entry[begin_index]).group(1))
+            for i, ver in enumerate(entry):
+                minor = int(minor_pattern.match(ver).group(1))
+                if minor != current_minor_ver:
+                    yield entry[begin_index:i]
+                    begin_index = i
+                    current_minor_ver = minor
+            yield entry[begin_index:]
+
+        joiner = ",\n" + "  " * depth
+        line = joiner.join(
+            [
+                ", ".join([f'"{ver}"' for ver in minor_group])
+                for minor_group in iter_minor_versions()
+            ]
+        )
+
+        return line
+
+    root_element_strings = [
+                               f'"{key}": [\n'
+                               + ",\n".join([item_formatter(item, depth=1) for item in combos[key]])
+                               + "\n]"
+                               for key, item_formatter in (
+            ("qt", fmt_dict_entry),
+            ("tools", fmt_dict_entry),
+            ("modules", fmt_module_entry),
+        )
+                           ] + [
+                               f'"{key}": [\n  ' + fmt_version_list(combos[key], depth=1) + "\n]"
+                               for key in ("versions", "new_archive")
+                           ]
+
+    return "[{" + ", ".join(root_element_strings) + "}]"
+
+
+def compare_combos(
+        actual_combos: Dict[str, Union[List[str], List[Dict]]],
+        expected_combos: Dict[str, Union[List[str], List[Dict]]],
+        actual_name: str,
+        expect_name: str,
+) -> bool:
+    # list_of_str_keys: the values attached to these keys are List[str]
+    list_of_str_keys = "versions", "new_archive"
+
+    has_difference = False
+
+    # Don't compare data pulled from previous file
+    skipped_keys = ("new_archive",)
+
+    def compare_modules_entry(actual_mod_item: Dict, expect_mod_item: Dict) -> bool:
+        """Return True if difference detected. Print description of difference."""
+        version = actual_mod_item["qt_version"]
+        actual_modules, expect_modules = set(actual_mod_item["modules"]), set(
+            expect_mod_item["modules"]
+        )
+        mods_missing_from_actual = expect_modules - actual_modules
+        mods_missing_from_expect = actual_modules - expect_modules
+        if mods_missing_from_actual:
+            logger.info(
+                f"{actual_name}['modules'] for Qt {version} is missing {mods_missing_from_actual}"
+            )
+        if mods_missing_from_expect:
+            logger.info(
+                f"{expect_name}['modules'] for Qt {version} is missing {mods_missing_from_expect}"
+            )
+        return bool(mods_missing_from_actual) or bool(mods_missing_from_expect)
+
+    def to_set(a_list: Union[List[str], List[Dict]]) -> Set:
+        if len(a_list) == 0:
+            return set()
+        if isinstance(a_list[0], str):
+            return set(a_list)
+        assert isinstance(a_list[0], Dict)
+        return set([str(a_dict) for a_dict in a_list])
+
+    def report_difference(
+            superset: Set, subset: Set, subset_name: str, key: str
+    ) -> bool:
+        """Return True if difference detected. Print description of difference."""
+        missing_from_superset = sorted(superset - subset)
+        if not missing_from_superset:
+            return False
+        logger.info(f"{subset_name}['{key}'] is missing these entries:")
+        if key in list_of_str_keys:
+            logger.info(format(missing_from_superset))
+            return True
+        for el in missing_from_superset:
+            logger.info(format(el))
+        return True
+
+    for root_key in actual_combos.keys():
+        if root_key in skipped_keys:
+            continue
+
+        logger.info(f"\nComparing {root_key}:\n{'-' * 40}")
+        if root_key == "modules":
+            for actual_row, expect_row in zip(
+                    actual_combos[root_key], expected_combos[root_key]
+            ):
+                assert actual_row["qt_version"] == expect_row["qt_version"]
+                has_difference |= compare_modules_entry(actual_row, expect_row)
+            continue
+
+        actual_set = to_set(actual_combos[root_key])
+        expected_set = to_set(expected_combos[root_key])
+        has_difference |= report_difference(
+            expected_set, actual_set, actual_name, root_key
+        )
+        has_difference |= report_difference(
+            actual_set, expected_set, expect_name, root_key
+        )
+
+    return has_difference
+
+
 def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
     try:
         expect = json.loads(filename.read_text())
@@ -168,11 +328,13 @@ def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
         if is_verbose:
             logger.info("=" * 80)
             logger.info("Program Output:")
-            logger.info(json.dumps(actual, sort_keys=True, indent=2))
+            # logger.info(json.dumps(actual, sort_keys=True, indent=2))
+            pretty_print_combos(actual[0])
 
             logger.info("=" * 80)
             logger.info(f"Comparison with existing '{filename}':")
-            logger.info(json.dumps(diff, sort_keys=True, indent=2))
+            compare_combos(actual[0], expect[0], "program output", str(filename))
+            # logger.info(json.dumps(diff, sort_keys=True, indent=2))
             logger.info("=" * 80)
 
         if diff == NO_DIFF:
