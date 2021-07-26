@@ -27,6 +27,7 @@ import multiprocessing
 import os
 import platform
 import random
+import signal
 import subprocess
 import time
 from logging import getLogger
@@ -48,7 +49,7 @@ from aqt.helper import (
     getUrl,
     setup_logging,
 )
-from aqt.metadata import ArchiveId, MetadataFactory, Version, show_list
+from aqt.metadata import ArchiveId, MetadataFactory, SimpleSpec, Version, show_list
 from aqt.updater import Updater
 
 try:
@@ -284,7 +285,9 @@ class Cli:
         except ArchiveDownloadError or ArchiveListError or NoPackageFound:
             exit(1)
         target_config = qt_archives.get_target_config()
-        run_installer(qt_archives.get_packages(), base_dir, sevenzip, keep)
+        result = run_installer(qt_archives.get_packages(), base_dir, sevenzip, keep)
+        if not result:
+            exit(1)
         if not nopatch:
             Updater.update(target_config, base_dir)
         self.logger.info("Finished installation")
@@ -362,8 +365,13 @@ class Cli:
                 exit(1)
         except ArchiveDownloadError or ArchiveListError:
             exit(1)
-        run_installer(srcdocexamples_archives.get_packages(), base_dir, sevenzip, keep)
-        self.logger.info("Finished installation")
+        result = run_installer(
+            srcdocexamples_archives.get_packages(), base_dir, sevenzip, keep
+        )
+        if result:
+            self.logger.info("Finished installation")
+        else:
+            exit(1)
 
     def run_src(self, args):
         """Run src subcommand"""
@@ -409,9 +417,9 @@ class Cli:
         """Run tool subcommand"""
         start_time = time.perf_counter()
         self.show_aqt_version()
-        arch = args.arch
-        tool_name = args.tool_name
-        os_name = args.host
+        tool_name = args.tool_name  # such as tools_openssl_x64
+        os_name = args.host  # windows, linux and mac
+        target = args.target  # desktop, android and ios
         output_dir = args.outputdir
         if output_dir is None:
             base_dir = os.getcwd()
@@ -421,7 +429,7 @@ class Cli:
         if EXT7Z and sevenzip is None:
             # override when py7zr is not exist
             sevenzip = self._set_sevenzip(Settings.zipcmd)
-        version = args.version
+        version = "0.0.1"  # just store a dummy version
         keep = args.keep
         if args.base is not None:
             base = args.base
@@ -431,41 +439,58 @@ class Cli:
             timeout = (args.timeout, args.timeout)
         else:
             timeout = (Settings.connection_timeout, Settings.response_timeout)
-        if not self._check_tools_arg_combination(os_name, tool_name, arch):
-            self.logger.warning(
-                "Specified target combination is not valid: {} {} {}".format(
-                    os_name, tool_name, arch
-                )
-            )
-
-        try:
-            tool_archives = ToolArchives(
-                os_name=os_name,
+        if args.arch is None:
+            archs = MetadataFactory(
+                archive_id=ArchiveId("tools", os_name, target, ""),
+                is_latest_version=True,
                 tool_name=tool_name,
-                base=base,
-                version_str=version,
-                arch=arch,
-                timeout=timeout,
-            )
-        except ArchiveConnectionError:
-            try:
+            ).getList()
+        else:
+            archs = [args.arch]
+
+        for arch in archs:
+            if not self._check_tools_arg_combination(os_name, tool_name, arch):
                 self.logger.warning(
-                    "Connection to the download site failed and fallback to mirror site."
+                    "Specified target combination is not valid: {} {} {}".format(
+                        os_name, tool_name, arch
+                    )
                 )
+
+            try:
                 tool_archives = ToolArchives(
                     os_name=os_name,
                     tool_name=tool_name,
-                    base=random.choice(Settings.fallbacks),
+                    target=target,
+                    base=base,
                     version_str=version,
                     arch=arch,
                     timeout=timeout,
                 )
-            except Exception:
-                self.logger.error("Connection to the download site failed. Aborted...")
+            except ArchiveConnectionError:
+                try:
+                    self.logger.warning(
+                        "Connection to the download site failed and fallback to mirror site."
+                    )
+                    tool_archives = ToolArchives(
+                        os_name=os_name,
+                        target=target,
+                        tool_name=tool_name,
+                        base=random.choice(Settings.fallbacks),
+                        version_str=version,
+                        arch=arch,
+                        timeout=timeout,
+                    )
+                except Exception:
+                    self.logger.error(
+                        "Connection to the download site failed. Aborted..."
+                    )
+                    exit(1)
+            except ArchiveDownloadError or ArchiveListError:
                 exit(1)
-        except ArchiveDownloadError or ArchiveListError:
-            exit(1)
-        run_installer(tool_archives.get_packages(), base_dir, sevenzip, keep)
+            if not run_installer(
+                tool_archives.get_packages(), base_dir, sevenzip, keep
+            ):
+                exit(1)
         self.logger.info("Finished installation")
         self.logger.info(
             "Time elapsed: {time:.8f} second".format(
@@ -473,8 +498,8 @@ class Cli:
             )
         )
 
-    def run_list(self, args: argparse.ArgumentParser) -> int:
-        """Print tools, versions of Qt, extensions, modules, architectures"""
+    def run_list_qt(self, args: argparse.ArgumentParser) -> int:
+        """Print versions of Qt, extensions, modules, architectures"""
 
         if not args.target:
             print(" ".join(ArchiveId.TARGETS_FOR_HOST[args.host]))
@@ -494,50 +519,51 @@ class Cli:
                         version_str
                     )
                 )
-                exit(1)
+                exit(1)  # TODO: maybe return 1 instead?
+
+        spec = None
+        try:
+            if args.spec is not None:
+                spec = SimpleSpec(args.spec)
+        except ValueError:
+            self.logger.error(
+                f"Invalid version specification: '{args.spec}'.\n" + SimpleSpec.usage()
+            )
+            return 1
 
         meta = MetadataFactory(
             archive_id=ArchiveId(
-                args.category,
+                "qt",
                 args.host,
                 args.target,
                 args.extension if args.extension else "",
             ),
-            filter_minor=args.filter_minor,
+            spec=spec,
             is_latest_version=args.latest_version,
             modules_ver=args.modules,
             extensions_ver=args.extensions,
             architectures_ver=args.arch,
-            tool_name=args.tool,
-            tool_long_listing=args.tool_long,
         )
         return show_list(meta)
 
-    def _make_list_parser(self, subparsers: argparse._SubParsersAction):
+    def _make_list_qt_parser(self, subparsers: argparse._SubParsersAction):
         """Creates a subparser that works with the MetadataFactory, and adds it to the `subparsers` parameter"""
         list_parser: argparse.ArgumentParser = subparsers.add_parser(
-            "list",
+            "list-qt",
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="Examples:\n"
-            "$ aqt list qt5 mac                                            # print all targets for Mac OS\n"
-            "$ aqt list tools mac desktop                                  # print all tools for mac desktop\n"
-            "$ aqt list tools mac desktop --tool tools_ifw                 # print all tool variant names for QtIFW\n"
-            "$ aqt list qt5 mac desktop                                    # print all versions of Qt 5\n"
-            "$ aqt list qt5 mac desktop --extension wasm                   # print all wasm versions of Qt 5\n"
-            "$ aqt list qt5 mac desktop --filter-minor 9                   # print all versions of Qt 5.9\n"
-            "$ aqt list qt5 mac desktop --filter-minor 9 --latest-version  # print latest Qt 5.9\n"
-            "$ aqt list qt5 mac desktop --modules 5.12.0                   # print modules for 5.12.0\n"
-            "$ aqt list qt5 mac desktop --filter-minor 9 --modules latest  # print modules for latest 5.9\n"
-            "$ aqt list qt5 mac desktop --extensions 5.9.0                 # print choices for --extension flag\n"
-            "$ aqt list qt5 mac desktop --arch 5.9.9                       "
+            "$ aqt list-qt mac                                            # print all targets for Mac OS\n"
+            "$ aqt list-qt mac desktop                                    # print all versions of Qt 5\n"
+            "$ aqt list-qt mac desktop --extension wasm                   # print all wasm versions of Qt 5\n"
+            '$ aqt list-qt mac desktop --spec "5.9"                       # print all versions of Qt 5.9\n'
+            '$ aqt list-qt mac desktop --spec "5.9" --latest-version      # print latest Qt 5.9\n'
+            "$ aqt list-qt mac desktop --modules 5.12.0                   # print modules for 5.12.0\n"
+            "$ aqt list-qt mac desktop --spec 5.9 --modules latest  # print modules for latest 5.9\n"
+            "$ aqt list-qt mac desktop --extensions 5.9.0                 # print choices for --extension flag\n"
+            "$ aqt list-qt mac desktop --arch 5.9.9                       "
             "# print architectures for 5.9.9/mac/desktop\n"
-            "$ aqt list qt5 mac desktop --arch latest                      "
+            "$ aqt list-qt mac desktop --arch latest                      "
             "# print architectures for the latest Qt 5\n",
-        )
-        list_parser.add_argument(
-            "category",
-            choices=["tools", "qt5", "qt6"],
-            help="category of packages to list",
         )
         list_parser.add_argument(
             "host", choices=["linux", "mac", "windows"], help="host os name"
@@ -556,11 +582,11 @@ class Cli:
             "Use the `--extensions` flag to list all relevant options for a host/target.",
         )
         list_parser.add_argument(
-            "--filter-minor",
-            type=int,
-            metavar="MINOR_VERSION",
-            help="print versions for a particular minor version. "
-            "IE: `aqt list qt5 windows desktop --filter-minor 12` prints all versions beginning with 5.12",
+            "--spec",
+            type=str,
+            metavar="SPECIFICATION",
+            help="Filter output so that only versions that match the specification are printed. "
+            'IE: `aqt list-qt windows desktop --spec "5.12"` prints all versions beginning with 5.12',
         )
         output_modifier_exclusive_group = list_parser.add_mutually_exclusive_group()
         output_modifier_exclusive_group.add_argument(
@@ -590,27 +616,66 @@ class Cli:
             action="store_true",
             help="print only the newest version available",
         )
-        output_modifier_exclusive_group.add_argument(
-            "--tool",
-            type=str,
-            metavar="TOOL_NAME",
-            help="The name of a tool. Use 'aqt list tools <host> <target>' to see accepted values. "
-            "This flag only works with the 'tools' category, and cannot be combined with any other flags. "
-            "When set, this prints all 'tool variant names' available. "
-            # TODO: find a better word ^^^^^^^^^^^^^^^^^^^^; this is a mysterious help message
-            "The output of this command is intended to be used with `aqt tool`.",
+        list_parser.set_defaults(func=self.run_list_qt)
+
+    def run_list_tool(self, args: argparse.ArgumentParser) -> int:
+        """Print tools"""
+
+        if not args.target:
+            print(" ".join(ArchiveId.TARGETS_FOR_HOST[args.host]))
+            return 0
+        if args.target not in ArchiveId.TARGETS_FOR_HOST[args.host]:
+            self.logger.error(
+                "'{0.target}' is not a valid target for host '{0.host}'".format(args)
+            )
+            return 1
+
+        meta = MetadataFactory(
+            archive_id=ArchiveId("tools", args.host, args.target),
+            tool_name=args.tool_name,
+            is_long_listing=args.long,
         )
-        output_modifier_exclusive_group.add_argument(
-            "--tool-long",
-            type=str,
-            metavar="TOOL_NAME",
-            help="The name of a tool. Use 'aqt list tools <host> <target>' to see accepted values. "
-            "This flag only works with the 'tools' category, and cannot be combined with any other flags. "
-            "When set, this prints all 'tool variant names' available, along with versions and release dates. "
-            # TODO: find a better word ^^^^^^^^^^^^^^^^^^^^; this is a mysterious help message
-            "The output of this command is formatted as a table.",
+        return show_list(meta)
+
+    def _make_list_tool_parser(self, subparsers: argparse._SubParsersAction):
+        """Creates a subparser that works with the MetadataFactory, and adds it to the `subparsers` parameter"""
+        list_parser: argparse.ArgumentParser = subparsers.add_parser(
+            "list-tool",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="Examples:\n"
+            "$ aqt list-tool mac desktop                 # print all tools for mac desktop\n"
+            "$ aqt list-tool mac desktop tools_ifw       # print all tool variant names for QtIFW\n"
+            "$ aqt list-tool mac desktop ifw             # print all tool variant names for QtIFW\n"
+            "$ aqt list-tool mac desktop -l tools_ifw    # print tool variant names with metadata for QtIFW\n"
+            "$ aqt list-tool mac desktop -l ifw          # print tool variant names with metadata for QtIFW\n",
         )
-        list_parser.set_defaults(func=self.run_list)
+        list_parser.add_argument(
+            "host", choices=["linux", "mac", "windows"], help="host os name"
+        )
+        list_parser.add_argument(
+            "target",
+            nargs="?",
+            default=None,
+            choices=["desktop", "winrt", "android", "ios"],
+            help="Target SDK. When omitted, this prints all the targets available for a host OS.",
+        )
+        list_parser.add_argument(
+            "tool_name",
+            nargs="?",
+            default=None,
+            help='Name of a tool, ie "tools_mingw" or "tools_ifw". '
+            "When omitted, this prints all the tool names available for a host OS/target SDK combination. "
+            "When present, this prints all the tool variant names available for this tool. ",
+        )
+        list_parser.add_argument(
+            "-l",
+            "--long",
+            action="store_true",
+            help="Long display: shows a table of metadata associated with each tool variant. "
+            "On narrow terminals, it displays tool variant names, versions, and release dates. "
+            "On terminals wider than 95 characters, it also displays descriptions of each tool.",
+        )
+        list_parser.set_defaults(func=self.run_list_tool)
 
     def show_help(self, args=None):
         """Display help message"""
@@ -758,19 +823,26 @@ class Cli:
             "host", choices=["linux", "mac", "windows"], help="host os name"
         )
         tools_parser.add_argument(
+            "target",
+            default=None,
+            choices=["desktop", "winrt", "android", "ios"],
+            help="Target SDK.",
+        )
+
+        tools_parser.add_argument(
             "tool_name", help="Name of tool such as tools_ifw, tools_mingw"
         )
         tools_parser.add_argument(
-            "version", help='Tool version in the format of "4.1.2"'
-        )
-        tools_parser.add_argument(
             "arch",
+            nargs="?",
+            default=None,
             help="Name of full tool name such as qt.tools.ifw.31. "
-            "Please use 'aqt list --tool' to list acceptable values for this parameter.",
+            "Please use 'aqt list-tool' to list acceptable values for this parameter.",
         )
         self._set_common_options(tools_parser)
 
-        self._make_list_parser(subparsers)
+        self._make_list_qt_parser(subparsers)
+        self._make_list_tool_parser(subparsers)
         #
         help_parser = subparsers.add_parser("help")
         help_parser.set_defaults(func=self.show_help)
@@ -818,7 +890,8 @@ class Cli:
 
 def run_installer(
     archives: List[QtPackage], base_dir: str, sevenzip: Optional[str], keep: bool
-):
+) -> bool:
+    result = True
     queue = multiprocessing.Manager().Queue(-1)
     listener = MyQueueListener(queue)
     listener.start()
@@ -827,14 +900,25 @@ def run_installer(
     for arc in archives:
         tasks.append((arc, base_dir, sevenzip, queue, keep))
     ctx = multiprocessing.get_context("spawn")
-    pool = ctx.Pool(Settings.concurrency)
-    pool.starmap(installer, tasks)
-    #
-    pool.close()
-    pool.join()
+    pool = ctx.Pool(Settings.concurrency, init_worker_sh)
+    try:
+        pool.starmap(installer, tasks)
+        pool.close()
+        pool.join()
+    except KeyboardInterrupt:
+        logger = getLogger("aqt.installer")
+        logger.warning("Caught KeyboardInterrupt, terminating installer workers")
+        pool.terminate()
+        pool.join()
+        result = False
     # all done, close logging service for sub-processes
     listener.enqueue_sentinel()
     listener.stop()
+    return result
+
+
+def init_worker_sh():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def installer(

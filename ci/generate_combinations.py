@@ -3,23 +3,10 @@
 import argparse
 import json
 import logging
-import os
-import textwrap
 from pathlib import Path
-from typing import (
-    Callable,
-    Dict,
-    Generator,
-    Iterator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Dict, Generator, Iterator, List, Optional, Tuple, Union
 
-from jsoncomparison import Compare, NO_DIFF
-from tqdm import tqdm as base_tqdm
+from jsoncomparison import NO_DIFF, Compare
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings, setup_logging
@@ -38,46 +25,44 @@ def is_blacklisted_tool(tool_name: str) -> bool:
 
 def iter_archive_ids(
     *,
-    categories: Iterator[str] = ArchiveId.CATEGORIES,
+    category: str,
     hosts: Iterator[str] = ArchiveId.HOSTS,
     targets: Optional[Iterator[str]] = None,
     add_extensions: bool = False,
 ) -> Generator[ArchiveId, None, None]:
     def iter_extensions() -> Generator[str, None, None]:
-        if add_extensions:
-            if cat == "qt6" and target == "android":
-                yield from ("x86_64", "x86", "armv7", "arm64_v8a")
+        if add_extensions and category == "qt":
+            if target == "android":
+                yield from ("", "x86_64", "x86", "armv7", "arm64_v8a")
                 return
-            elif cat == "qt5" and target == "desktop":
+            elif target == "desktop":
                 yield from ("wasm", "")
                 return
         yield ""
 
-    for cat in categories:
-        for host in sorted(hosts):
-            use_targets = targets
-            if use_targets is None:
-                use_targets = ArchiveId.TARGETS_FOR_HOST[host]
-            for target in use_targets:
-                if target == "winrt" and cat == "qt6":
-                    # there is no qt6 for winrt
-                    continue
-                for ext in iter_extensions():
-                    yield ArchiveId(cat, host, target, ext)
+    for host in sorted(hosts):
+        use_targets = targets
+        if use_targets is None:
+            use_targets = ArchiveId.TARGETS_FOR_HOST[host]
+        for target in use_targets:
+            for ext in iter_extensions():
+                yield ArchiveId(category, host, target, ext)
 
 
 def iter_arches() -> Generator[dict, None, None]:
     logger.info("Fetching arches")
-    archive_ids = list(iter_archive_ids(categories=("qt5", "qt6"), add_extensions=True))
+    archive_ids = list(iter_archive_ids(category="qt", add_extensions=True))
     for archive_id in tqdm(archive_ids):
-        versions = (
-            ("latest",)
-            if archive_id.category == "qt6"
-            else ("latest", "5.13.2", "5.9.9")
-        )
-        for version in versions:
-            if version == "5.9.9" and archive_id.extension == "wasm":
+        for version in ("latest", "5.15.2", "5.13.2", "5.9.9"):
+            if archive_id.extension == "wasm" and (
+                version == "5.9.9" or version == "latest"
+            ):
                 continue
+            if archive_id.target == "android":
+                if version == "latest" and archive_id.extension == "":
+                    continue
+                if version != "latest" and archive_id.extension != "":
+                    continue
             for arch_name in MetadataFactory(
                 archive_id, architectures_ver=version
             ).getList():
@@ -89,7 +74,7 @@ def iter_arches() -> Generator[dict, None, None]:
 
 
 def iter_tool_variants() -> Generator[dict, None, None]:
-    for archive_id in iter_archive_ids(categories=("tools",)):
+    for archive_id in iter_archive_ids(category="tools"):
         logger.info("Fetching tool variants for {}".format(archive_id))
         for tool_name in tqdm(sorted(MetadataFactory(archive_id).getList())):
             if is_blacklisted_tool(tool_name):
@@ -108,14 +93,10 @@ def iter_tool_variants() -> Generator[dict, None, None]:
 def iter_qt_minor_groups(
     host: str = "linux", target: str = "desktop"
 ) -> Generator[Tuple[int, int], None, None]:
-    for cat in (
-        "qt5",
-        "qt6",
-    ):
-        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
-        for minor_group in versions:
-            v = minor_group[0]
-            yield v.major, v.minor
+    versions: Versions = MetadataFactory(ArchiveId("qt", host, target)).getList()
+    for minor_group in versions:
+        v = minor_group[0]
+        yield v.major, v.minor
 
 
 def iter_modules_for_qt_minor_groups(
@@ -123,24 +104,19 @@ def iter_modules_for_qt_minor_groups(
 ) -> Generator[Dict, None, None]:
     logger.info("Fetching qt modules for {}/{}".format(host, target))
     for major, minor in tqdm(list(iter_qt_minor_groups(host, target))):
-        cat = f"qt{major}"
         yield {
             "qt_version": f"{major}.{minor}",
             "modules": MetadataFactory(
-                ArchiveId(cat, host, target), modules_ver=f"{major}.{minor}.0"
+                ArchiveId("qt", host, target), modules_ver=f"{major}.{minor}.0"
             ).getList(),
         }
 
 
 def list_qt_versions(host: str = "linux", target: str = "desktop") -> List[str]:
     all_versions = list()
-    for cat in (
-        "qt5",
-        "qt6",
-    ):
-        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
-        for minor_group in versions:
-            all_versions.extend([str(ver) for ver in minor_group])
+    versions: Versions = MetadataFactory(ArchiveId("qt", host, target)).getList()
+    for minor_group in versions:
+        all_versions.extend([str(ver) for ver in minor_group])
     return all_versions
 
 
@@ -182,23 +158,7 @@ def write_combinations_json(
         raise RuntimeError("Failed to write file!")
 
 
-def describe_env():
-    repo_name = os.getenv("GITHUB_REPOSITORY")
-    run_id = os.getenv("GITHUB_RUN_ID")
-
-    logger.info(
-        textwrap.dedent(
-            f"""
-        Environment:
-        Repo name: {repo_name}
-        Run id: {run_id}
-        """
-        )
-    )
-
-
 def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
-
     try:
         expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
@@ -213,6 +173,7 @@ def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
             logger.info("=" * 80)
             logger.info(f"Comparison with existing '{filename}':")
             logger.info(json.dumps(diff, sort_keys=True, indent=2))
+            logger.info("=" * 80)
 
         if diff == NO_DIFF:
             logger.info(f"{filename} is up to date! No PR is necessary this time!")
@@ -229,8 +190,13 @@ def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
         return 1
 
 
-def local_tqdm(disable: bool):
-    return lambda *args: base_tqdm(*args, disable=disable)
+def get_tqdm(disable: bool):
+    if disable:
+        return lambda x: x
+
+    from tqdm import tqdm as base_tqdm
+
+    return lambda *a: base_tqdm(*a, disable=disable)
 
 
 if __name__ == "__main__":
@@ -238,9 +204,7 @@ if __name__ == "__main__":
     setup_logging()
     logger = logging.getLogger("aqt.generate_combos")
 
-    describe_env()
     json_filename = Path(__file__).parent.parent / "aqt/combinations.json"
-    logger.info(f"File to modify: {json_filename}")
 
     parser = argparse.ArgumentParser(
         description="Generate combinations.json from download.qt.io, "
@@ -263,8 +227,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    logger.info(f"Disable tqdm: {args.no_tqdm}\nWrite {json_filename}: {args.write}")
+    tqdm = get_tqdm(args.no_tqdm)
 
-    tqdm = local_tqdm(args.no_tqdm)
-
-    exit(main(filename=json_filename, is_write_file=args.write, is_verbose=args.verbose))
+    exit(
+        main(filename=json_filename, is_write_file=args.write, is_verbose=args.verbose)
+    )
