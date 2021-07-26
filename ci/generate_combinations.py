@@ -182,7 +182,7 @@ def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
         indent = "  " * (depth + 1)
         while len(line) - window[0] > max_width:
             break_loc = line.rfind(" ", window[0], window[1])
-            line = line[:break_loc] + "\n" + indent + line[break_loc + 1:]
+            line = line[:break_loc] + "\n" + indent + line[break_loc + 1 :]
             window = (break_loc + len(indent), break_loc + len(indent) + max_width)
         return line
 
@@ -222,27 +222,27 @@ def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
         return line
 
     root_element_strings = [
-                               f'"{key}": [\n'
-                               + ",\n".join([item_formatter(item, depth=1) for item in combos[key]])
-                               + "\n]"
-                               for key, item_formatter in (
+        f'"{key}": [\n'
+        + ",\n".join([item_formatter(item, depth=1) for item in combos[key]])
+        + "\n]"
+        for key, item_formatter in (
             ("qt", fmt_dict_entry),
             ("tools", fmt_dict_entry),
             ("modules", fmt_module_entry),
         )
-                           ] + [
-                               f'"{key}": [\n  ' + fmt_version_list(combos[key], depth=1) + "\n]"
-                               for key in ("versions", "new_archive")
-                           ]
+    ] + [
+        f'"{key}": [\n  ' + fmt_version_list(combos[key], depth=1) + "\n]"
+        for key in ("versions", "new_archive")
+    ]
 
     return "[{" + ", ".join(root_element_strings) + "}]"
 
 
 def compare_combos(
-        actual_combos: Dict[str, Union[List[str], List[Dict]]],
-        expected_combos: Dict[str, Union[List[str], List[Dict]]],
-        actual_name: str,
-        expect_name: str,
+    actual_combos: Dict[str, Union[List[str], List[Dict]]],
+    expected_combos: Dict[str, Union[List[str], List[Dict]]],
+    actual_name: str,
+    expect_name: str,
 ) -> bool:
     # list_of_str_keys: the values attached to these keys are List[str]
     list_of_str_keys = "versions", "new_archive"
@@ -279,7 +279,7 @@ def compare_combos(
         return set([str(a_dict) for a_dict in a_list])
 
     def report_difference(
-            superset: Set, subset: Set, subset_name: str, key: str
+        superset: Set, subset: Set, subset_name: str, key: str
     ) -> bool:
         """Return True if difference detected. Print description of difference."""
         missing_from_superset = sorted(superset - subset)
@@ -300,7 +300,7 @@ def compare_combos(
         logger.info(f"\nComparing {root_key}:\n{'-' * 40}")
         if root_key == "modules":
             for actual_row, expect_row in zip(
-                    actual_combos[root_key], expected_combos[root_key]
+                actual_combos[root_key], expected_combos[root_key]
             ):
                 assert actual_row["qt_version"] == expect_row["qt_version"]
                 has_difference |= compare_modules_entry(actual_row, expect_row)
