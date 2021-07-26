@@ -154,7 +154,7 @@ def write_combinations_json(
     filename: Path,
 ):
     logger.info(f"Write file {filename}")
-    json_text = json.dumps(combos, sort_keys=True, indent=2)
+    json_text = pretty_print_combos(combos[0])  # json.dumps(combos, sort_keys=True, indent=2)
     if filename.write_text(json_text, encoding="utf_8") == 0:
         raise RuntimeError("Failed to write file!")
 
