@@ -5,7 +5,9 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Generator, Iterator, List, Optional, Set, Tuple, Union
+from typing import Dict, Generator, Iterator, List, Optional, Tuple, Union, Set
+
+from jsoncomparison import NO_DIFF, Compare
 
 from aqt.exceptions import ArchiveConnectionError, ArchiveDownloadError
 from aqt.helper import Settings, setup_logging
@@ -24,46 +26,44 @@ def is_blacklisted_tool(tool_name: str) -> bool:
 
 def iter_archive_ids(
     *,
-    categories: Iterator[str] = ArchiveId.CATEGORIES,
+    category: str,
     hosts: Iterator[str] = ArchiveId.HOSTS,
     targets: Optional[Iterator[str]] = None,
     add_extensions: bool = False,
 ) -> Generator[ArchiveId, None, None]:
     def iter_extensions() -> Generator[str, None, None]:
-        if add_extensions:
-            if cat == "qt6" and target == "android":
-                yield from ("x86_64", "x86", "armv7", "arm64_v8a")
+        if add_extensions and category == "qt":
+            if target == "android":
+                yield from ("", "x86_64", "x86", "armv7", "arm64_v8a")
                 return
-            elif cat == "qt5" and target == "desktop":
+            elif target == "desktop":
                 yield from ("wasm", "")
                 return
         yield ""
 
-    for cat in categories:
-        for host in sorted(hosts):
-            use_targets = targets
-            if use_targets is None:
-                use_targets = ArchiveId.TARGETS_FOR_HOST[host]
-            for target in use_targets:
-                if target == "winrt" and cat == "qt6":
-                    # there is no qt6 for winrt
-                    continue
-                for ext in iter_extensions():
-                    yield ArchiveId(cat, host, target, ext)
+    for host in sorted(hosts):
+        use_targets = targets
+        if use_targets is None:
+            use_targets = ArchiveId.TARGETS_FOR_HOST[host]
+        for target in use_targets:
+            for ext in iter_extensions():
+                yield ArchiveId(category, host, target, ext)
 
 
 def iter_arches() -> Generator[dict, None, None]:
     logger.info("Fetching arches")
-    archive_ids = list(iter_archive_ids(categories=("qt5", "qt6"), add_extensions=True))
+    archive_ids = list(iter_archive_ids(category="qt", add_extensions=True))
     for archive_id in tqdm(archive_ids):
-        versions = (
-            ("latest",)
-            if archive_id.category == "qt6"
-            else ("latest", "5.13.2", "5.9.9")
-        )
-        for version in versions:
-            if version == "5.9.9" and archive_id.extension == "wasm":
+        for version in ("latest", "5.15.2", "5.13.2", "5.9.9"):
+            if archive_id.extension == "wasm" and (
+                version == "5.9.9" or version == "latest"
+            ):
                 continue
+            if archive_id.target == "android":
+                if version == "latest" and archive_id.extension == "":
+                    continue
+                if version != "latest" and archive_id.extension != "":
+                    continue
             for arch_name in MetadataFactory(
                 archive_id, architectures_ver=version
             ).getList():
@@ -75,7 +75,7 @@ def iter_arches() -> Generator[dict, None, None]:
 
 
 def iter_tool_variants() -> Generator[dict, None, None]:
-    for archive_id in iter_archive_ids(categories=("tools",)):
+    for archive_id in iter_archive_ids(category="tools"):
         logger.info("Fetching tool variants for {}".format(archive_id))
         for tool_name in tqdm(sorted(MetadataFactory(archive_id).getList())):
             if is_blacklisted_tool(tool_name):
@@ -94,14 +94,10 @@ def iter_tool_variants() -> Generator[dict, None, None]:
 def iter_qt_minor_groups(
     host: str = "linux", target: str = "desktop"
 ) -> Generator[Tuple[int, int], None, None]:
-    for cat in (
-        "qt5",
-        "qt6",
-    ):
-        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
-        for minor_group in versions:
-            v = minor_group[0]
-            yield v.major, v.minor
+    versions: Versions = MetadataFactory(ArchiveId("qt", host, target)).getList()
+    for minor_group in versions:
+        v = minor_group[0]
+        yield v.major, v.minor
 
 
 def iter_modules_for_qt_minor_groups(
@@ -109,24 +105,19 @@ def iter_modules_for_qt_minor_groups(
 ) -> Generator[Dict, None, None]:
     logger.info("Fetching qt modules for {}/{}".format(host, target))
     for major, minor in tqdm(list(iter_qt_minor_groups(host, target))):
-        cat = f"qt{major}"
         yield {
             "qt_version": f"{major}.{minor}",
             "modules": MetadataFactory(
-                ArchiveId(cat, host, target), modules_ver=f"{major}.{minor}.0"
+                ArchiveId("qt", host, target), modules_ver=f"{major}.{minor}.0"
             ).getList(),
         }
 
 
 def list_qt_versions(host: str = "linux", target: str = "desktop") -> List[str]:
     all_versions = list()
-    for cat in (
-        "qt5",
-        "qt6",
-    ):
-        versions: Versions = MetadataFactory(ArchiveId(cat, host, target)).getList()
-        for minor_group in versions:
-            all_versions.extend([str(ver) for ver in minor_group])
+    versions: Versions = MetadataFactory(ArchiveId("qt", host, target)).getList()
+    for minor_group in versions:
+        all_versions.extend([str(ver) for ver in minor_group])
     return all_versions
 
 
@@ -151,6 +142,21 @@ def generate_combos(new_archive: List[str]):
         "versions": list_qt_versions(),
         "new_archive": new_archive,
     }
+
+
+def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
+    for i, item in enumerate(combos["modules"]):
+        combos["modules"][i]["modules"] = sorted(item["modules"])
+
+
+def write_combinations_json(
+    combos: List[Dict[str, Union[List[Dict], List[str]]]],
+    filename: Path,
+):
+    logger.info(f"Write file {filename}")
+    json_text = pretty_print_combos(combos[0])  # json.dumps(combos, sort_keys=True, indent=2)
+    if filename.write_text(json_text, encoding="utf_8") == 0:
+        raise RuntimeError("Failed to write file!")
 
 
 def pretty_print_combos(combos: Dict[str, Union[List[Dict], List[str]]]) -> str:
@@ -312,48 +318,33 @@ def compare_combos(
     return has_difference
 
 
-def alphabetize_modules(combos: Dict[str, Union[List[Dict], List[str]]]):
-    for i, item in enumerate(combos["modules"]):
-        combos["modules"][i]["modules"] = sorted(item["modules"])
-
-
-def write_combinations_json(
-    combos: Dict[str, Union[List[Dict], List[str]]],
-    filename: Path,
-    is_use_pretty_print: bool = True,
-):
-    logger.info(f"Write file {filename}")
-    json_text = (
-        pretty_print_combos(combos)
-        if is_use_pretty_print
-        else json.dumps([combos], sort_keys=True, indent=2)
-    )
-    if filename.write_text(json_text, encoding="utf_8") == 0:
-        raise RuntimeError("Failed to write file!")
-
-
-def main(filename: Path, is_write_file: bool) -> int:
+def main(filename: Path, is_write_file: bool, is_verbose: bool) -> int:
     try:
         expect = json.loads(filename.read_text())
         alphabetize_modules(expect[0])
-        actual = generate_combos(new_archive=expect[0]["new_archive"])
+        actual = [generate_combos(new_archive=expect[0]["new_archive"])]
+        diff = Compare().check(expect, actual)
 
-        logger.info("=" * 80)
-        logger.info("Program Output:")
-        logger.info(pretty_print_combos(actual))
+        if is_verbose:
+            logger.info("=" * 80)
+            logger.info("Program Output:")
+            # logger.info(json.dumps(actual, sort_keys=True, indent=2))
+            pretty_print_combos(actual[0])
 
-        logger.info("=" * 80)
-        logger.info(f"Comparison with existing '{filename}':")
-        diff = compare_combos(actual, expect[0], "program_output", str(filename))
-        logger.info("=" * 80)
+            logger.info("=" * 80)
+            logger.info(f"Comparison with existing '{filename}':")
+            compare_combos(actual[0], expect[0], "program output", str(filename))
+            # logger.info(json.dumps(diff, sort_keys=True, indent=2))
+            logger.info("=" * 80)
 
-        if not diff:
-            print(f"{filename} is up to date! No PR is necessary this time!")
+        if diff == NO_DIFF:
+            logger.info(f"{filename} is up to date! No PR is necessary this time!")
             return 0  # no difference
         if is_write_file:
-            print(f"{filename} has changed; writing changes to file...")
+            logger.info(f"{filename} has changed; writing changes to file...")
             write_combinations_json(actual, filename)
-            return 0  # file written successfully
+            return 0  # File written successfully
+        logger.warning(f"{filename} is out of date, but no changes were written")
         return 1  # difference reported
 
     except (ArchiveConnectionError, ArchiveDownloadError) as e:
@@ -391,8 +382,15 @@ if __name__ == "__main__":
         help="disable progress bars (makes CI logs easier to read)",
         action="store_true",
     )
+    parser.add_argument(
+        "--verbose",
+        help="Print a json dump of the new file, and an abbreviated diff with the old file",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     tqdm = get_tqdm(args.no_tqdm)
 
-    exit(main(filename=json_filename, is_write_file=args.write))
+    exit(
+        main(filename=json_filename, is_write_file=args.write, is_verbose=args.verbose)
+    )

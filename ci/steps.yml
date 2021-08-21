@@ -19,7 +19,7 @@ steps:
       sleep $number
       mkdir Qt
       cd Qt
-      if [[ "$(SUBCOMMAND)" == "install" ]]; then
+      if [[ "$(SUBCOMMAND)" == "install-qt" ]]; then
         opt=""
         if [[ "$(QT_BASE_MIRROR)" != "" ]]; then
           opt+=" -b $(QT_BASE_MIRROR)"
@@ -35,12 +35,12 @@ steps:
         if [[ "$(SUBARCHIVES)" != "" ]]; then
           opt+=" --archives $(SUBARCHIVES)"
         fi
-        python -m aqt install $(QT_VERSION) $(HOST) $(TARGET) $(ARCH) $opt
+        python -m aqt install-qt $(HOST) $(TARGET) $(QT_VERSION) $(ARCH) $opt
         if [[ "$(TARGET)" == "android" || "$(TARGET)" == "ios" ]]; then
           if [[ "$(HOST)" == "windows" ]]; then
-            python -m aqt install $(QT_VERSION) $(HOST) desktop mingw81_64 --archives qtbase
+            python -m aqt install-qt $(HOST) desktop $(QT_VERSION) mingw81_64 --archives qtbase
           else
-            python -m aqt install $(QT_VERSION) $(HOST) desktop --archives qtbase
+            python -m aqt install-qt $(HOST) desktop $(QT_VERSION) --archives qtbase
           fi
         fi
         if [[ "$(OUTPUT_DIR)" != "" ]]; then
@@ -65,47 +65,44 @@ steps:
         fi
       fi
       if [[ "$(SUBCOMMAND)" == "list" ]]; then
-        qtversion=$(QT_VERSION)
-        MAJORMINOR=${qtversion%.*}
-        qtmajor="qt${MAJORMINOR%.*}"
-        qtminor=${MAJORMINOR##*.}
         if [[ $(USE_EXTENSION) != "None" ]]; then
           # In this case, if you don't specify an extension, Updates.xml just shows dependencies
           ext="--extension $(USE_EXTENSION)"
         fi
-        aqt list $qtmajor $(HOST)                                               # print all targets for host
-        aqt list tools $(HOST) $(TARGET)                                        # print all tools for host/target
-        aqt list tools $(HOST) $(TARGET) --tool tools_qt3dstudio_runtime_240    # print all tool variant names for qt3dstudio
-        aqt list tools $(HOST) $(TARGET) --tool-long tools_qt3dstudio_runtime_240    # print tool variant names, versions, release dates
+        aqt list-qt $(HOST)                                                     # print all targets for host
+        aqt list-tool $(HOST) $(TARGET)                                         # print all tools for host/target
+        aqt list-tool $(HOST) $(TARGET) qt3dstudio_runtime_240                  # print all tool variant names for qt3dstudio
+        aqt list-tool $(HOST) $(TARGET) qt3dstudio_runtime_240 --long           # print tool variant names, versions, release dates
         if [[ "$(TARGET)" == "desktop" ]]; then
-          aqt list tools $(HOST) $(TARGET) --tool tools_qtcreator               # print all tool variant names for qtcreator
-          aqt list tools $(HOST) $(TARGET) --tool-long tools_qtcreator          # print tool variant names, versions, release dates
+          aqt list-tool $(HOST) $(TARGET) tools_qtcreator                       # print all tool variant names for qtcreator
+          aqt list-tool $(HOST) $(TARGET) tools_qtcreator -l                    # print tool variant names, versions, release dates
         fi
-        aqt list $qtmajor $(HOST) $(TARGET)                                     # print all versions of Qt
-        if [[ $(HAS_WASM_EXTENSION) == "True" ]]; then
-          aqt list $qtmajor $(HOST) $(TARGET) --extension wasm                  # print all wasm versions of Qt5
+        aqt list-qt $(HOST) $(TARGET)                                           # print all versions of Qt
+        if [[ $(HOST) == "desktop" ]]; then
+          aqt list-qt $(HOST) $(TARGET) --extension wasm                        # print all wasm versions of Qt
         else
-          ! aqt list $qtmajor $(HOST) $(TARGET) --extension wasm                # Only Qt5 desktop provides wasm extension
+          ! aqt list-qt $(HOST) $(TARGET) --extension wasm                      # there are no wasm versions of Qt
         fi
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --filter-minor $qtminor        # print all versions of Qt major/minor
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --filter-minor $qtminor --latest-version  # print latest Qt major/minor
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --filter-minor $qtminor --modules latest  # print modules for latest major/minor
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --modules $(QT_VERSION)        # print modules for version/host/target
+        aqt list-qt $(HOST) $(TARGET) $ext --spec "$(SPEC)"                     # print all versions of Qt in SimpleSpec
+        ver=$(aqt list-qt $(HOST) $(TARGET) $ext --spec "$(SPEC)" --latest-version)  # latest Qt in SimpleSpec
+        [ $ver == $(QT_VERSION) ]                                               # latest version in SPEC must be QT_VERSION
+        aqt list-qt $(HOST) $(TARGET) $ext --spec "$(SPEC)" --modules latest    # print modules for latest in SimpleSpec
+        aqt list-qt $(HOST) $(TARGET) $ext --modules $(QT_VERSION)              # print modules for version/host/target
         if [[ $(HAS_EXTENSIONS) == "True" ]]; then
-          aqt list $qtmajor $(HOST) $(TARGET) --extensions $(QT_VERSION)        # print choices for --extension flag
-          aqt list $qtmajor $(HOST) $(TARGET) --filter-minor $qtminor --extensions latest
+          aqt list-qt $(HOST) $(TARGET) --extensions $(QT_VERSION)              # print choices for --extension flag
+          aqt list-qt $(HOST) $(TARGET) --spec "$(SPEC)" --extensions latest
         else
-          ! aqt list $qtmajor $(HOST) $(TARGET) --extensions $(QT_VERSION)
-          ! aqt list $qtmajor $(HOST) $(TARGET) --filter-minor $qtminor --extensions latest
+          ! aqt list-qt $(HOST) $(TARGET) --extensions $(QT_VERSION)
+          ! aqt list-qt $(HOST) $(TARGET) --spec "$(SPEC)" --extensions latest
         fi
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --arch $(QT_VERSION)           # print architectures for version/host/target
-        aqt list $qtmajor $(HOST) $(TARGET) $ext --filter-minor $qtminor --arch latest
+        aqt list-qt $(HOST) $(TARGET) $ext --arch $(QT_VERSION)                 # print architectures for version/host/target
+        aqt list-qt $(HOST) $(TARGET) $ext --spec "$(SPEC)" --arch latest
       fi
-      if [[ "$(SUBCOMMAND)" == "src" ]]; then
-        python -m aqt $(SUBCOMMAND) $(QT_VERSION) $(HOST) $(TARGET) --archives $(SUBARCHIVES)
+      if [[ "$(SUBCOMMAND)" == "install-src" ]]; then
+        python -m aqt $(SUBCOMMAND) $(HOST) $(TARGET) $(QT_VERSION) --archives $(SUBARCHIVES)
       fi
-      if [[ "$(SUBCOMMAND)" == "doc" ]]; then
-        python -m aqt $(SUBCOMMAND) $(QT_VERSION) $(HOST) $(TARGET) --archives $(SUBARCHIVES)
+      if [[ "$(SUBCOMMAND)" == "install-doc" ]]; then
+        python -m aqt $(SUBCOMMAND) $(HOST) $(TARGET) $(QT_VERSION) --archives $(SUBARCHIVES)
       fi
     workingDirectory: $(Build.BinariesDirectory)
     env:
@@ -137,7 +134,7 @@ steps:
   - script: |
       sudo apt-get update
       sudo apt-get install -y libgl1-mesa-dev
-    condition: and(eq(variables['TARGET'], 'desktop'), eq(variables['Agent.OS'], 'Linux'), eq(variables['SUBCOMMAND'], 'install'))
+    condition: and(eq(variables['TARGET'], 'desktop'), eq(variables['Agent.OS'], 'Linux'), eq(variables['SUBCOMMAND'], 'install-qt'))
     displayName: install test dependency for Linux
 
   ##----------------------------------------------------
@@ -146,7 +143,7 @@ steps:
       Install-PackageProvider NuGet -Force
       Import-PackageProvider NuGet -Force
       Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-      Install-Module Pscx -AllowClobber
+      Install-Module Pscx -AllowClobber -AllowPrerelease
       Install-Module VSSetup -Scope CurrentUser
       if ('$(ARCH)' -like '*msvc*') {
         Write-Host '##vso[task.setvariable variable=TOOLCHAIN]MSVC'
@@ -179,9 +176,8 @@ steps:
       export PATH=$(QT_BINDIR):$PATH
       qmake $(Build.BinariesDirectory)/tests/helloworld
       make
-    condition: and(eq( variables['TARGET'], 'desktop' ), ne( variables['ARCH'], 'wasm_32' ), or(eq(variables['Agent.OS'], 'Linux'), eq(variables['Agent.OS'], 'Darwin')), eq(variables['MODULE'], ''), eq(variables['SUBCOMMAND'], 'install'))
+    condition: and(eq( variables['TARGET'], 'desktop' ), ne( variables['ARCH'], 'wasm_32' ), or(eq(variables['Agent.OS'], 'Linux'), eq(variables['Agent.OS'], 'Darwin')), eq(variables['MODULE'], ''), eq(variables['SUBCOMMAND'], 'install-qt'))
     displayName: Build test with qmake for Linux and macOS w/o extra module
-  # TODO: current PSCX release does not support VSVER 2019
   - powershell: |
       if ( $env:TOOLCHAIN -eq 'MSVC' ) {
         Import-VisualStudioVars -VisualStudioVersion $(VSVER) -Architecture $(ARCHITECTURE)
@@ -194,10 +190,10 @@ steps:
         jom
       } elseif ( $env:TOOLCHAIN -eq 'MINGW' ) {
         if ( $env:ARCH -eq 'win64_mingw81' ) {
-          python -m aqt tool --outputdir $(Build.BinariesDirectory)/Qt $(HOST) tools_mingw 8.1.0-1-202004170606 qt.tools.win64_mingw810
+          python -m aqt install-tool --outputdir $(Build.BinariesDirectory)/Qt $(HOST) desktop tools_mingw qt.tools.win64_mingw810
           [Environment]::SetEnvironmentVariable("Path", ";$(Build.BinariesDirectory)\Qt\Tools\mingw810_64\bin" + $env:Path, "Machine")
         } else {
-          python -m aqt tool --outputdir $(Build.BinariesDirectory)/Qt $(HOST) tools_mingw 8.1.0-1-202004170606 qt.tools.win32_mingw810
+          python -m aqt install-tool --outputdir $(Build.BinariesDirectory)/Qt $(HOST) desktop tools_mingw qt.tools.win32_mingw810
           [Environment]::SetEnvironmentVariable("Path", ";$(Build.BinariesDirectory)\Qt\Tools\mingw810_32\bin" + $env:Path, "Machine")
         }
         $env:Path = "$(Build.BinariesDirectory)\Qt\Tools\$(ARCHDIR)\bin;$(WIN_QT_BINDIR);" + $env:Path
@@ -226,6 +222,9 @@ steps:
       set -ex
       mkdir $(Build.BinariesDirectory)/tests
       (cd $(Build.BinariesDirectory)/tests; 7zr x $(Build.SourcesDirectory)/ci/redditclient.7z)
+      if [[ "6" -eq "${QT_VERSION:0:1}" ]]; then
+        (cd $(Build.BinariesDirectory)/tests/redditclient;patch -i redditclient_6.diff -p1)
+      fi
       export PATH=$(QT_BINDIR):$PATH
       qmake $(Build.BinariesDirectory)/tests/redditclient
       make

@@ -121,14 +121,14 @@
       },
       {
         "modules": [
-          "addons.qt3d",
-          "addons.qtcharts",
-          "addons.qtdatavis3d",
-          "addons.qtimageformats",
-          "addons.qtlottie",
-          "addons.qtnetworkauth",
-          "addons.qtscxml",
-          "addons.qtvirtualkeyboard",
+          "qt3d",
+          "qtcharts",
+          "qtdatavis3d",
+          "qtimageformats",
+          "qtlottie",
+          "qtnetworkauth",
+          "qtscxml",
+          "qtvirtualkeyboard",
           "debug_info",
           "qt5compat",
           "qtquick3d",
@@ -140,25 +140,25 @@
       },
       {
         "modules": [
-          "addons.qt3d",
-          "addons.qtcharts",
-          "addons.qtconnectivity",
-          "addons.qtdatavis3d",
-          "addons.qtimageformats",
-          "addons.qtlottie",
-          "addons.qtmultimedia",
-          "addons.qtnetworkauth",
-          "addons.qtpositioning",
-          "addons.qtremoteobjects",
-          "addons.qtscxml",
-          "addons.qtsensors",
-          "addons.qtserialbus",
-          "addons.qtserialport",
-          "addons.qtvirtualkeyboard",
-          "addons.qtwebchannel",
-          "addons.qtwebengine",
-          "addons.qtwebsockets",
-          "addons.qtwebview",
+          "qt3d",
+          "qtcharts",
+          "qtconnectivity",
+          "qtdatavis3d",
+          "qtimageformats",
+          "qtlottie",
+          "qtmultimedia",
+          "qtnetworkauth",
+          "qtpositioning",
+          "qtremoteobjects",
+          "qtscxml",
+          "qtsensors",
+          "qtserialbus",
+          "qtserialport",
+          "qtvirtualkeyboard",
+          "qtwebchannel",
+          "qtwebengine",
+          "qtwebsockets",
+          "qtwebview",
           "debug_info",
           "qt5compat",
           "qtquick3d",
@@ -579,6 +579,240 @@
         "os_name": "mac",
         "target": "desktop",
         "tool_name": "tools_telemetry"
+      },
+      {
+        "arch": "qt.tools.cmake.win32",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_cmake"
+      },
+      {
+        "arch": "qt.tools.cmake.win64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_cmake"
+      },
+      {
+        "arch": "qt.tools.conan",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_conan"
+      },
+      {
+        "arch": "qt.tools.conan.cmake",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_conan"
+      },
+      {
+        "arch": "qt.tools.sdktools.doc",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_generic"
+      },
+      {
+        "arch": "qt.tools.ifw.41",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_ifw"
+      },
+      {
+        "arch": "qt.tools.maintenance",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_maintenance"
+      },
+      {
+        "arch": "qt.tools.mingw47",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw48",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw482",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw491",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw492",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw530",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw730",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win32_mingw810",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win64_mingw730",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.win64_mingw810",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_mingw"
+      },
+      {
+        "arch": "qt.tools.ninja",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_ninja"
+      },
+      {
+        "arch": "qt.tools.openssl.src",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_openssl_src"
+      },
+      {
+        "arch": "qt.tools.openssl.win_x64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_openssl_x64"
+      },
+      {
+        "arch": "qt.tools.openssl.win_x86",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_openssl_x86"
+      },
+      {
+        "arch": "qt.tools.qt3dstudio",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qt3dstudio"
+      },
+      {
+        "arch": "qt.tools.qtcreator",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtcreator"
+      },
+      {
+        "arch": "qt.tools.qtcreatorcdbext",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtcreator"
+      },
+      {
+        "arch": "qt.tools.qtcreatordbg",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtcreator"
+      },
+      {
+        "arch": "qt.tools.qtcreatordev",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtcreator"
+      },
+      {
+        "arch": "qt.tools.windows_kits_debuggers",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtcreator"
+      },
+      {
+        "arch": "qt.tools.qtdesignstudio",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_qtdesignstudio"
+      },
+      {
+        "arch": "qt.tools.qtcreator.telemetry",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_telemetry"
+      },
+      {
+        "arch": "qt.tools.vcredist",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2015_x86",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2013_x64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2015_x64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2013_x86",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2017_x64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2017_x86",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2019_x64",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
+      },
+      {
+        "arch": "qt.tools.vcredist_msvc2019_x86",
+        "os_name": "windows",
+        "target": "desktop",
+        "tool_name": "tools_vcredist"
       }
     ],
     "versions": [
