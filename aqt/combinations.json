@@ -107,66 +107,6 @@
           "qtwebglplugin"
         ],
         "qt_version": "5.15"
-      },
-      {
-        "modules": [
-          "debug_info",
-          "qt5compat",
-          "qtquick3d",
-          "qtquicktimeline",
-          "qtshadertools",
-          "qtwaylandcompositor"
-        ],
-        "qt_version": "6.0"
-      },
-      {
-        "modules": [
-          "qt3d",
-          "qtcharts",
-          "qtdatavis3d",
-          "qtimageformats",
-          "qtlottie",
-          "qtnetworkauth",
-          "qtscxml",
-          "qtvirtualkeyboard",
-          "debug_info",
-          "qt5compat",
-          "qtquick3d",
-          "qtquicktimeline",
-          "qtshadertools",
-          "qtwaylandcompositor"
-        ],
-        "qt_version": "6.1"
-      },
-      {
-        "modules": [
-          "qt3d",
-          "qtcharts",
-          "qtconnectivity",
-          "qtdatavis3d",
-          "qtimageformats",
-          "qtlottie",
-          "qtmultimedia",
-          "qtnetworkauth",
-          "qtpositioning",
-          "qtremoteobjects",
-          "qtscxml",
-          "qtsensors",
-          "qtserialbus",
-          "qtserialport",
-          "qtvirtualkeyboard",
-          "qtwebchannel",
-          "qtwebengine",
-          "qtwebsockets",
-          "qtwebview",
-          "debug_info",
-          "qt5compat",
-          "qtquick3d",
-          "qtquicktimeline",
-          "qtshadertools",
-          "qtwaylandcompositor"
-        ],
-        "qt_version": "6.2"
       }
     ],
     "new_archive": [
