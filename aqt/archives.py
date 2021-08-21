@@ -97,20 +97,26 @@ class QtArchives:
             self.all_extra = True
         else:
             for m in modules if modules is not None else []:
+                if self.version.major >= 6 and not m.startswith("addons."):
+                    self.mod_list.append(
+                        "qt.qt{0}.{1}.addons.{2}.{3}".format(
+                            self.version.major,
+                            self._version_str(),
+                            m,
+                            arch,
+                        )
+                    )
                 self.mod_list.append(
-                    "qt.qt{0}.{0}{1}{2}.{3}.{4}".format(
+                    "qt.qt{0}.{1}.{2}.{3}".format(
                         self.version.major,
-                        self.version.minor,
-                        self.version.patch,
+                        self._version_str(),
                         m,
                         arch,
                     )
                 )
                 self.mod_list.append(
-                    "qt.{0}{1}{2}.{3}.{4}".format(
-                        self.version.major,
-                        self.version.minor,
-                        self.version.patch,
+                    "qt.{0}.{1}.{2}".format(
+                        self._version_str(),
                         m,
                         arch,
                     )
@@ -120,6 +126,11 @@ class QtArchives:
         if not all_archives:
             self.archives = list(filter(lambda a: a.name in subarchives, self.archives))
 
+    def _version_str(self) -> str:
+        return ("{0.major}{0.minor}" if self.version == Version("5.9.0") else "{0.major}{0.minor}{0.patch}").format(
+            self.version
+        )
+
     def _get_archives(self):
         # Get packages index
         if self.arch == "wasm_32":
@@ -128,31 +139,25 @@ class QtArchives:
             arch_ext = "{}".format(self.arch[7:])
         else:
             arch_ext = ""
-        archive_path = "{0}{1}{2}/qt{3}_{3}{4}{5}{6}/".format(
+        archive_path = "{0}{1}/{2}/qt{3}_{4}{5}/".format(
             self.os_name,
-            "_x86/" if self.os_name == "windows" else "_x64/",
+            "_x86" if self.os_name == "windows" else "_x64",
             self.target,
             self.version.major,
-            self.version.minor,
-            self.version.patch,
+            self._version_str(),
             arch_ext,
         )
         update_xml_url = "{0}{1}Updates.xml".format(self.base, archive_path)
         archive_url = "{0}{1}".format(self.base, archive_path)
         target_packages = []
         target_packages.append(
-            "qt.qt{0}.{0}{1}{2}.{3}".format(
+            "qt.qt{0}.{1}.{2}".format(
                 self.version.major,
-                self.version.minor,
-                self.version.patch,
+                self._version_str(),
                 self.arch,
             )
         )
-        target_packages.append(
-            "qt.{0}{1}{2}.{3}".format(
-                self.version.major, self.version.minor, self.version.patch, self.arch
-            )
-        )
+        target_packages.append("qt.{0}.{1}".format(self._version_str(), self.arch))
         target_packages.extend(self.mod_list)
         self._download_update_xml(update_xml_url)
         self._parse_update_xml(archive_url, target_packages)
@@ -174,10 +179,7 @@ class QtArchives:
             if self.all_extra:
                 # Check platform
                 name_last_section = name.split(".")[-1]
-                if (
-                    name_last_section in self.arch_list
-                    and self.arch != name_last_section
-                ):
+                if name_last_section in self.arch_list and self.arch != name_last_section:
                     continue
                 # Check doc/examples
                 if self.arch in ["doc", "examples"]:
@@ -185,9 +187,7 @@ class QtArchives:
                         continue
             if self.all_extra or name in target_packages:
                 if packageupdate.find("DownloadableArchives").text is not None:
-                    downloadable_archives = packageupdate.find(
-                        "DownloadableArchives"
-                    ).text.split(", ")
+                    downloadable_archives = packageupdate.find("DownloadableArchives").text.split(", ")
                     full_version = packageupdate.find("Version").text
                     package_desc = packageupdate.find("Description").text
                     for archive in downloadable_archives:
@@ -211,9 +211,7 @@ class QtArchives:
                             )
                         )
         if len(self.archives) == 0:
-            self.logger.error(
-                "Specified packages are not found while parsing XML of package information!"
-            )
+            self.logger.error("Specified packages are not found while parsing XML of package information!")
             raise NoPackageFound
 
     def get_packages(self) -> List[QtPackage]:
