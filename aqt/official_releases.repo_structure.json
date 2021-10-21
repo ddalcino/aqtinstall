@@ -1,0 +1,384 @@
+{
+  "vsaddin": {
+    "vsix": {
+      "args": [
+        "semver",
+        "msvc_year"
+      ],
+      "allowed_values": {
+        "msvc_year": [
+          "2019",
+          "2017",
+          "2015",
+          "2013"
+        ]
+      },
+      "url_template": "{semver}/qt-vsaddin-msvc{msvc_year}-{semver}.vsix"
+    }
+  },
+  "qtdesignstudio": {
+    "binary": {
+      "args": [
+        "semver",
+        "host"
+      ],
+      "host-to-arch": {
+        "windows": "windows-x86",
+        "mac": "mac-x86_64",
+        "linux": "linux-x86_64"
+      },
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "url_template": "{semver}/qt-designstudio-{arch}-{semver}-community.{file_ext}"
+    }
+  },
+  "qtcreator": {
+    "binary": {
+      "args": [
+        "semver",
+        "host"
+      ],
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "url_template": "{major_minor_semver}/{semver}/qt-creator-opensource-{host}-x86_64-{semver}.{file_ext}"
+    },
+    "installer_source": {
+      "args": [
+        "semver",
+        "host",
+        "archive",
+        "bits"
+      ],
+      "allowed_values": {
+        "archive": [
+          "wininterrupt",
+          "qtcreatorcdbext",
+          "qtcreator_dev",
+          "qtcreator",
+          "qtcreator-debug"
+        ]
+      },
+      "host-to-arch": {
+        "mac": "x64",
+        "linux": "x64",
+        "windows": {
+          "bits-to-arch": {
+            "32": "x86",
+            "64": "x64"
+          }
+        }
+      },
+      "url_template": "{major_minor_semver}/{semver}/installer_source/{host}_{arch}/{archive}.7z"
+    },
+    "opensource": {
+      "args": [
+        "semver",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.xz",
+          "tar.gz"
+        ]
+      },
+      "url_template": "{major_minor_semver}/{semver}/qt-creator-opensource-src-{semver}.{file_ext}"
+    },
+    "installer_mac": {
+      "args": ["semver"],
+      "url_template": "{major_minor_semver}/{semver}/qt-creator-opensource-mac-x86_64-{semver}_installer.dmg"
+    }
+  },
+  "qtchooser": {
+    "default": {
+      "args": [
+        "numeric_release",
+        "opt_ext",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.zst",
+          "tar.xz",
+          "tar.gz"
+        ]
+      },
+      "url_template": "qtchooser-{numeric_release}{opt_ext}.{file_ext}"
+    }
+  },
+  "qt3dstudio": {
+    "binary": {
+      "args": [
+        "semver",
+        "host"
+      ],
+      "host-to-arch": {
+        "windows": "windows-x86",
+        "mac": "mac-x64",
+        "linux": "linux-x64"
+      },
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "url_template": "{major_minor_semver}/qt-3dstudio-opensource-{arch}-{semver}.{file_ext}"
+    }
+  },
+  "qt": {
+    "single": {
+      "args": [
+        "semver",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.xz"
+        ]
+      },
+      "url_template": "{major_minor_semver}/{semver}/single/qt-everywhere-src-{semver}.{file_ext}"
+    },
+    "submodules": {
+      "args": [
+        "semver",
+        "module",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.xz"
+        ]
+      },
+      "url_template": "{major_minor_semver}/{semver}/submodules/qt{module}-everywhere-src-{semver}.{file_ext}"
+    },
+    "binary-5.12": {
+      "args": [
+        "semver",
+        "host"
+      ],
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "host-to-arch": {
+        "windows": "windows-x86",
+        "mac": "mac-x64",
+        "linux": "linux-x64"
+      },
+      "url_template": "5.12/{semver}/qt-opensource-{arch}-{semver}.{file_ext}"
+    }
+  },
+  "qt-installer-framework": {
+    "binary": {
+      "args": [
+        "semver",
+        "host"
+      ],
+      "host-to-arch": {
+        "windows": "win-x86",
+        "mac": {
+          "semver-to-arch": {
+            ">=4.1": "macOS-x86_64",
+            "<4.1": "mac-x64"
+          }
+        },
+        "linux": "linux-x64"
+      },
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "url_template": "{semver}/QtInstallerFramework-{arch}.{file_ext}"
+    },
+    "source": {
+      "args": [
+        "semver",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.xz",
+          "tar.gz",
+          "tar",
+          "gz"
+        ]
+      },
+      "url_template": "{semver}/installer-framework-opensource-src-{semver}.{file_ext}"
+    }
+  },
+  "qbs": {
+    "binary": {
+      "args": [
+        "semver",
+        "host",
+        "bits"
+      ],
+      "host-to-arch": {
+        "windows": {
+          "bits-to-arch": {
+            "32": "windows-x86",
+            "64": "windows-x86_64"
+          }
+        },
+        "mac": "macos-x86_64",
+        "linux": "linux-x86_64"
+      },
+      "host-to-file_ext": {
+        "windows": "zip",
+        "mac": "tar.gz",
+        "linux": "tar.gz"
+      },
+      "url_template": "{semver}/qbs-{arch}-{semver}.{file_ext}"
+    },
+    "nupkg": {
+      "args": [
+        "semver"
+      ],
+      "url_template": "{semver}/qbs.{semver}.nupkg"
+    },
+    "source": {
+      "args": [
+        "semver",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "file_ext": [
+          "zip",
+          "tar.gz"
+        ]
+      },
+      "url_template": "{semver}/qbs-src-{semver}.{file_ext}"
+    }
+  },
+  "pyside": {
+    "todo": {}
+  },
+  "online_installers": {
+    "binary": {
+      "args": [
+        "host"
+      ],
+      "host-to-arch": {
+        "windows": "windows-x86",
+        "mac": "mac-x64",
+        "linux": "linux-x64"
+      },
+      "host-to-file_ext": {
+        "windows": "exe",
+        "mac": "dmg",
+        "linux": "run"
+      },
+      "url_template": "qt-unified-{arch}-online.{file_ext}"
+    }
+  },
+  "jom": {
+    "stable": {
+      "url_template": "jom.zip"
+    },
+    "versioned": {
+      "args": [
+        "semver"
+      ],
+      "url_template": "jom_{semver_underscores}.zip"
+    }
+  },
+  "gdb": {
+    "binary": {
+      "args": [
+        "host",
+        "bits"
+      ],
+      "host-to-arch": {
+        "windows": {
+          "bits-to-arch": {
+            "32": "windows",
+            "64": "windows-x86_64"
+          }
+        },
+        "mac": {
+          "bits-to-arch": {
+            "32": "darwin-x86",
+            "64": "darwin-x86_64"
+          }
+        },
+        "linux": {
+          "bits-to-arch": {
+            "32": "linux-x86",
+            "64": "linux-x86_64"
+          }
+        }
+      },
+      "host-to-folder": {
+        "windows": "windows-7",
+        "mac": "osx",
+        "linux": {
+          "bits-to-folder": {
+            "32": "linux-32",
+            "64": "linux-64"
+          }
+        }
+      },
+      "host-to-file_ext": {
+        "windows": "tar.xz",
+        "mac": "tar.bz2",
+        "linux": "tar.xz"
+      },
+      "url_template": "{folder}/android-ndk-r10-{arch}-gdb.{file_ext}"
+    }
+  },
+  "additional_libraries": {
+    "source": {
+      "args": [
+        "semver",
+        "module",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "module": [
+          "qtnetworkauth",
+          "qtimageformats",
+          "qt3d"
+        ],
+        "file_ext": [
+          "zip",
+          "tar.xz"
+        ]
+      },
+      "url_template": "{major_minor_semver}/{semver}/{module}-everywhere-src-{semver}.{file_ext}"
+    },
+    "module": {
+      "args": [
+        "semver",
+        "module",
+        "file_ext"
+      ],
+      "allowed_values": {
+        "module": [
+          "qtnetworkauth",
+          "qtimageformats",
+          "qt3d"
+        ],
+        "file_ext": [
+          "zip",
+          "tar.xz"
+        ]
+      },
+      "url_template": "{module}/{major_minor_semver}/{semver}/{module}-everywhere-src-{semver}.{file_ext}"
+    }
+  },
+  "QtForPython": {
+    "todo": {}
+  }
+}
