@@ -139,6 +139,25 @@ def test_repo_model_list_schemas(repo_json):
     assert ["default", "alt"] == RepoModel(repo_json).list_schemas("qtdesignstudio")
 
 
+def test_repo_model_yield_urls():
+    schema = RepoModel(
+        """{"some_tool": { "default": {
+              "args":           ["file_ext", "bits"],
+              "allowed_values": {"file_ext": ["1", "txt", "zip"]},
+              "url_template":   "some_tool-{bits}.{file_ext}"
+           }}}"""
+    ).get_schema("some_tool", "default")
+    expected_urls = [
+        "some_tool/some_tool-64.1",
+        "some_tool/some_tool-32.1",
+        "some_tool/some_tool-64.txt",
+        "some_tool/some_tool-32.txt",
+        "some_tool/some_tool-64.zip",
+        "some_tool/some_tool-32.zip",
+    ]
+    assert expected_urls == [url for url in schema.yield_urls(["all", "all"])]
+
+
 @pytest.mark.parametrize(
     "expected_error_msg, repo_def",
     (

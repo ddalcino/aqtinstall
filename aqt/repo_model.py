@@ -1,7 +1,7 @@
 import json
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
-from aqt.exceptions import AqtException
+from aqt.exceptions import AqtException, CliInputError
 from aqt.metadata import SimpleSpec, Version
 
 
@@ -14,11 +14,15 @@ class Schema:
 
     def __init__(
         self,
+        tool_name: str,
+        schema_name: str,
         args: List[str],
         url_template: str,
         allowed_values: Optional[Dict[str, List[str]]] = None,
         conversions: Dict[str, Dict[str, str]] = None,
     ):
+        self.tool_name = tool_name
+        self.schema_name = schema_name
         self.args: List[str] = args
         self.url_template: str = url_template
         self.allowed_values: Dict[str, List[str]] = allowed_values if allowed_values else {}
@@ -69,7 +73,30 @@ class Schema:
             return self.allowed_values[key]
         if key in Schema.ALLOWED_VALUES:
             return Schema.ALLOWED_VALUES[key]
-        raise ValueError(f"Allowed values for the key '{key}' are not tracked.")
+        raise KeyError(f"Allowed values for the key '{key}' are not tracked.")
+
+    def yield_urls(self, args: List[str]) -> Generator[str, None, None]:
+        if len(args) != len(self.args):
+            raise CliInputError("Wrong number of arguments!")
+
+        # Use slate pattern to fill in arguments when an arg == "all"
+        def helper(args_dict: Dict[str, str], index: int) -> Generator[str, None, None]:
+            if index == len(args):
+                yield f"{self.tool_name}/{self.fill_template(args_dict)}"
+                return
+            # fill in the next argument
+            arg, arg_name = args[index], self.args[index]
+            if arg == "all":
+                for allowed_value in self.list_allowed_values_for(arg_name):
+                    args_dict[arg_name] = allowed_value
+                    yield from helper(args_dict, index + 1)
+                args_dict.pop(arg_name)
+            else:
+                args_dict[arg_name] = arg
+                yield from helper(args_dict, index + 1)
+                args_dict.pop(arg_name)
+
+        yield from helper({}, 0)
 
 
 class RepoModel:
@@ -85,5 +112,10 @@ class RepoModel:
     def get_schema(self, tool_name: str, schema: str) -> Schema:
         s: Dict = self.definition[tool_name][schema]
         return Schema(
-            args=s.pop("args"), url_template=s.pop("url_template"), allowed_values=s.pop("allowed_values", {}), conversions=s
+            tool_name=tool_name,
+            schema_name=schema,
+            args=s.pop("args"),
+            url_template=s.pop("url_template"),
+            allowed_values=s.pop("allowed_values", {}),
+            conversions=s,
         )
