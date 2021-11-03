@@ -18,12 +18,13 @@
 # COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-from typing import Iterable
+import os
+from typing import List
 
 
 class AqtException(Exception):
     def __init__(self, *args, **kwargs):
-        self.suggested_action: Iterable[str] = kwargs.pop("suggested_action", [])
+        self.suggested_action: List[str] = kwargs.pop("suggested_action", [])
         self.should_show_help: bool = kwargs.pop("should_show_help", False)
         super(AqtException, self).__init__(*args, **kwargs)
 
@@ -72,12 +73,16 @@ class CliKeyboardInterrupt(AqtException):
 
 
 class ArchiveExtractionError(AqtException):
-    pass
+    def __init__(self, extraction_tool: str, archive_failed_to_extract: str, *args, **kwargs):
+        msg = f"`{extraction_tool}` failed to extract `{archive_failed_to_extract}`: {args[0]}"
+        kwargs["suggested_action"] = (kwargs.get("suggested_action") or []) + [
+            "Consider using another 7z extraction tool with `--external`\n"
+            "  (see https://aqtinstall.readthedocs.io/en/latest/cli.html#cmdoption-list-tool-external)",
+            "If this error persists, file a bug report at https://github.com/miurahr/aqtinstall/issues,\n"
+            f"  and include the relevant log file at {os.getcwd()}/aqtinstall.log",
+        ]
+        super(ArchiveExtractionError, self).__init__(msg, *args[1:], **kwargs)
 
 
 class UpdaterError(AqtException):
-    pass
-
-
-class OutOfMemory(AqtException):
     pass

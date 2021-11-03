@@ -46,7 +46,6 @@ from aqt.exceptions import (
     ArchiveListError,
     CliInputError,
     CliKeyboardInterrupt,
-    OutOfMemory,
 )
 from aqt.helper import MyQueueListener, Settings, downloadBinaryFile, getUrl, retry_on_errors, setup_logging
 from aqt.metadata import ArchiveId, MetadataFactory, QtRepoProperty, SimpleSpec, Version, show_list, suggested_follow_up
@@ -862,22 +861,14 @@ def run_installer(archives: List[QtPackage], base_dir: str, sevenzip: Optional[s
     except KeyboardInterrupt as e:
         close_worker_pool_on_exception(e)
         raise CliKeyboardInterrupt("Installer halted by keyboard interrupt.") from e
-    except MemoryError as e:
+    except ArchiveExtractionError as e:
         close_worker_pool_on_exception(e)
-        alt_extractor_msg = (
-            "Please try using the '--external' flag to specify an alternate 7z extraction tool "
-            "(see https://aqtinstall.readthedocs.io/en/latest/cli.html#cmdoption-list-tool-external)"
-        )
         if Settings.concurrency > 1:
-            docs_url = "https://aqtinstall.readthedocs.io/en/stable/configuration.html#configuration"
-            raise OutOfMemory(
-                "Out of memory when downloading and extracting archives in parallel.",
-                suggested_action=[f"Please reduce your 'concurrency' setting (see {docs_url})", alt_extractor_msg],
-            ) from e
-        raise OutOfMemory(
-            "Out of memory when downloading and extracting archives.",
-            suggested_action=["Please free up more memory.", alt_extractor_msg],
-        )
+            e.suggested_action.append(
+                "Consider reducing your 'concurrency' setting\n"
+                "  (see https://aqtinstall.readthedocs.io/en/stable/configuration.html#configuration)"
+            )
+        raise e from e
     except Exception as e:
         close_worker_pool_on_exception(e)
         raise e from e
@@ -931,28 +922,21 @@ def installer(
         num_retries=Settings.max_retries_on_checksum_error,
         name=f"Downloading {name}",
     )
-    if command is None:
-        with py7zr.SevenZipFile(archive, "r") as szf:
-            szf.extractall(path=base_dir)
-    else:
-        if base_dir is not None:
-            command_args = [
-                command,
-                "x",
-                "-aoa",
-                "-bd",
-                "-y",
-                "-o{}".format(base_dir),
-                archive,
-            ]
+    try:
+        if command is None:
+            command = "py7zr"
+            with py7zr.SevenZipFile(archive, "r") as szf:
+                szf.extractall(path=base_dir)
         else:
-            command_args = [command, "x", "-aoa", "-bd", "-y", archive]
-        try:
+            output_dir_arg = ["-o{}".format(base_dir)] if base_dir is not None else []
+            command_args = [command, "x", "-aoa", "-bd", "-y", *output_dir_arg, archive]
             proc = subprocess.run(command_args, stdout=subprocess.PIPE, check=True)
             logger.debug(proc.stdout)
-        except subprocess.CalledProcessError as cpe:
-            msg = "\n".join(filter(None, [f"Extraction error: {cpe.returncode}", cpe.stdout, cpe.stderr]))
-            raise ArchiveExtractionError(msg) from cpe
+    except subprocess.CalledProcessError as cpe:
+        msg = "\n".join(filter(None, [f"`{command}` returned {cpe.returncode}", cpe.stdout, cpe.stderr]))
+        raise ArchiveExtractionError(command, archive, msg) from cpe
+    except Exception as e:
+        raise ArchiveExtractionError(command, archive, format(e)) from e
     if not keep:
         os.unlink(archive)
     logger.info("Finished installation of {} in {:.8f}".format(archive, time.perf_counter() - start_time))

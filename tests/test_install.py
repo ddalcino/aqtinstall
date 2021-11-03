@@ -646,6 +646,15 @@ def test_install_nonexistent_archives(monkeypatch, capsys, cmd, xml_file: Option
     assert actual == expected, "{0} != {1}".format(actual, expected)
 
 
+suggestions_for_ArchiveExtractionError = (
+    "==============================Suggested follow-up:==============================\n"
+    "* Consider using another 7z extraction tool with `--external`\n"
+    "  (see https://aqtinstall.readthedocs.io/en/latest/cli.html#cmdoption-list-tool-external)\n"
+    "* If this error persists, file a bug report at https://github.com/miurahr/aqtinstall/issues,\n"
+    f"  and include the relevant log file at {os.getcwd()}/aqtinstall.log"
+)
+
+
 @pytest.mark.parametrize(
     "make_exception, settings_file, expect_end_msg, expect_return",
     (
@@ -665,26 +674,19 @@ def test_install_nonexistent_archives(monkeypatch, capsys, cmd, xml_file: Option
             1,
         ),
         (
-            "MemoryError()",
+            "ArchiveExtractionError('py7zr', 'some_archive.7z', 'MemoryError')",
             "../aqt/settings.ini",
-            "Caught MemoryError, terminating installer workers\n"
-            "Out of memory when downloading and extracting archives in parallel.\n"
-            "==============================Suggested follow-up:==============================\n"
-            "* Please reduce your 'concurrency' setting (see "
-            "https://aqtinstall.readthedocs.io/en/stable/configuration.html#configuration)\n"
-            "* Please try using the '--external' flag to specify an alternate 7z extraction tool "
-            "(see https://aqtinstall.readthedocs.io/en/latest/cli.html#cmdoption-list-tool-external)",
+            "Caught ArchiveExtractionError, terminating installer workers\n"
+            "`py7zr` failed to extract `some_archive.7z`: MemoryError\n" + suggestions_for_ArchiveExtractionError + "\n"
+            "* Consider reducing your 'concurrency' setting\n"
+            "  (see https://aqtinstall.readthedocs.io/en/stable/configuration.html#configuration)",
             1,
         ),
         (
-            "MemoryError()",
+            "ArchiveExtractionError('py7zr', 'some_archive.7z', 'MemoryError')",
             "data/settings_no_concurrency.ini",
-            "Caught MemoryError, terminating installer workers\n"
-            "Out of memory when downloading and extracting archives.\n"
-            "==============================Suggested follow-up:==============================\n"
-            "* Please free up more memory.\n"
-            "* Please try using the '--external' flag to specify an alternate 7z extraction tool "
-            "(see https://aqtinstall.readthedocs.io/en/latest/cli.html#cmdoption-list-tool-external)",
+            "Caught ArchiveExtractionError, terminating installer workers\n"
+            "`py7zr` failed to extract `some_archive.7z`: MemoryError\n" + suggestions_for_ArchiveExtractionError,
             1,
         ),
     ),
@@ -714,16 +716,20 @@ def test_install_installer_archive_extraction_err(monkeypatch):
     def mock_extractor_that_fails(*args, **kwargs):
         raise subprocess.CalledProcessError(returncode=1, cmd="some command", output="out", stderr="err")
 
+    def mock_py7zr_that_throws(*args, **kwargs):
+        raise RuntimeError("py7zr failed for some reason")
+
     monkeypatch.setattr("aqt.installer.getUrl", lambda *args: "")
     monkeypatch.setattr("aqt.installer.downloadBinaryFile", lambda *args: None)
     monkeypatch.setattr("aqt.installer.subprocess.run", mock_extractor_that_fails)
+    monkeypatch.setattr("py7zr.SevenZipFile", mock_py7zr_that_throws)
 
     with pytest.raises(ArchiveExtractionError) as err, TemporaryDirectory() as temp_dir:
         installer(
             qt_archive=QtPackage(
                 "name",
                 "archive-url",
-                "archive",
+                "archive.7z",
                 "package_desc",
                 "hashurl",
                 "pkg_update_name",
@@ -734,4 +740,28 @@ def test_install_installer_archive_extraction_err(monkeypatch):
         )
     assert err.type == ArchiveExtractionError
     err_msg = format(err.value).rstrip()
-    assert err_msg == "Extraction error: 1\nout\nerr"
+    assert err_msg == (
+        "`some_nonexistent_7z_extractor` failed to extract `archive.7z`: "
+        "`some_nonexistent_7z_extractor` returned 1\nout\nerr\n"
+        + suggestions_for_ArchiveExtractionError
+    )
+
+    with pytest.raises(ArchiveExtractionError) as err, TemporaryDirectory() as temp_dir:
+        installer(
+            qt_archive=QtPackage(
+                "name",
+                "archive-url",
+                "archive.7z",
+                "package_desc",
+                "hashurl",
+                "pkg_update_name",
+            ),
+            base_dir=temp_dir,
+            command=None,
+            queue=MockMultiprocessingManager.Queue(),
+        )
+    assert err.type == ArchiveExtractionError
+    err_msg = format(err.value).rstrip()
+    assert err_msg == (
+        "`py7zr` failed to extract `archive.7z`: py7zr failed for some reason\n" + suggestions_for_ArchiveExtractionError
+    )
