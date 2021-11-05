@@ -99,6 +99,7 @@ class Cli:
             return 0
         except AqtException as e:
             self.logger.error(format(e), exc_info=Settings.print_stacktrace_on_error)
+            self.logger.debug("Stacktrace on exception:", exc_info=True)
             if e.should_show_help:
                 self.show_help()
             return 1
