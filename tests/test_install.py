@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import subprocess
 import sys
 import textwrap
 from dataclasses import dataclass
@@ -712,17 +711,34 @@ def test_install_pool_exception(monkeypatch, capsys, make_exception, settings_fi
     assert err.rstrip().endswith(expect_end_msg)
 
 
-def test_install_installer_archive_extraction_err(monkeypatch):
+@pytest.mark.parametrize(
+    "extractor_command, error_raised, to_monkeypatch, expected_err_msg",
+    (
+        (
+            "some_nonexistent_7z_extractor",
+            'subprocess.CalledProcessError(returncode=1, cmd="some command", output="out", stderr="err")',
+            "aqt.installer.subprocess.run",
+            "`some_nonexistent_7z_extractor` failed to extract `archive.7z`: "
+            "`some_nonexistent_7z_extractor` returned 1\nout\nerr\n" + suggestions_for_ArchiveExtractionError,
+        ),
+        (
+            None,
+            'RuntimeError("py7zr failed for some reason")',
+            "py7zr.SevenZipFile",
+            "`py7zr` failed to extract `archive.7z`: py7zr failed for some reason\n"
+            + suggestions_for_ArchiveExtractionError,
+        ),
+    ),
+)
+def test_install_installer_archive_extraction_err(
+    monkeypatch, extractor_command, error_raised, to_monkeypatch, expected_err_msg
+):
     def mock_extractor_that_fails(*args, **kwargs):
-        raise subprocess.CalledProcessError(returncode=1, cmd="some command", output="out", stderr="err")
-
-    def mock_py7zr_that_throws(*args, **kwargs):
-        raise RuntimeError("py7zr failed for some reason")
+        raise eval(error_raised)
 
     monkeypatch.setattr("aqt.installer.getUrl", lambda *args: "")
     monkeypatch.setattr("aqt.installer.downloadBinaryFile", lambda *args: None)
-    monkeypatch.setattr("aqt.installer.subprocess.run", mock_extractor_that_fails)
-    monkeypatch.setattr("py7zr.SevenZipFile", mock_py7zr_that_throws)
+    monkeypatch.setattr(to_monkeypatch, mock_extractor_that_fails)
 
     with pytest.raises(ArchiveExtractionError) as err, TemporaryDirectory() as temp_dir:
         installer(
@@ -735,33 +751,9 @@ def test_install_installer_archive_extraction_err(monkeypatch):
                 "pkg_update_name",
             ),
             base_dir=temp_dir,
-            command="some_nonexistent_7z_extractor",
+            command=extractor_command,
             queue=MockMultiprocessingManager.Queue(),
         )
     assert err.type == ArchiveExtractionError
     err_msg = format(err.value).rstrip()
-    assert err_msg == (
-        "`some_nonexistent_7z_extractor` failed to extract `archive.7z`: "
-        "`some_nonexistent_7z_extractor` returned 1\nout\nerr\n"
-        + suggestions_for_ArchiveExtractionError
-    )
-
-    with pytest.raises(ArchiveExtractionError) as err, TemporaryDirectory() as temp_dir:
-        installer(
-            qt_archive=QtPackage(
-                "name",
-                "archive-url",
-                "archive.7z",
-                "package_desc",
-                "hashurl",
-                "pkg_update_name",
-            ),
-            base_dir=temp_dir,
-            command=None,
-            queue=MockMultiprocessingManager.Queue(),
-        )
-    assert err.type == ArchiveExtractionError
-    err_msg = format(err.value).rstrip()
-    assert err_msg == (
-        "`py7zr` failed to extract `archive.7z`: py7zr failed for some reason\n" + suggestions_for_ArchiveExtractionError
-    )
+    assert err_msg == expected_err_msg
