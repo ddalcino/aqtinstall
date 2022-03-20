@@ -231,9 +231,7 @@ class QtArchives:
 
     def _download_update_xml(self, update_xml_path):
         """Hook for unit test."""
-        xml_hash = binascii.unhexlify(get_hash(update_xml_path, "sha256", self.timeout))
-        if xml_hash == "":
-            raise ChecksumDownloadFailure(f"Checksum for '{update_xml_path}' is empty")
+        xml_hash = get_hash(update_xml_path, "sha256", self.timeout)
         update_xml_text = getUrl(posixpath.join(self.base, update_xml_path), self.timeout, xml_hash)
         self.update_xml_text = update_xml_text
 

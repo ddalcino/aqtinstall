@@ -574,7 +574,7 @@ class MetadataFactory:
     @staticmethod
     def fetch_http(rest_of_url: str, is_check_hash: bool = True) -> str:
         timeout = (Settings.connection_timeout, Settings.response_timeout)
-        expected_hash = binascii.unhexlify(get_hash(rest_of_url, "sha256", timeout)) if is_check_hash else None
+        expected_hash = get_hash(rest_of_url, "sha256", timeout) if is_check_hash else None
         base_urls = Settings.baseurl, random.choice(Settings.fallbacks)
         for i, base_url in enumerate(base_urls):
             try:
